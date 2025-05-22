@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "tsc && node --experimental-modules --es-module-specifier-resolution=node dist/index.js",
     "serve": "node --experimental-modules --es-module-specifier-resolution=node dist/index.js",
+    "stdio": "tsc && node dist/stdioServer.js",
     "register": "tsc && node --experimental-modules --es-module-specifier-resolution=node dist/register.js",
     "test": "node --experimental-modules --es-module-specifier-resolution=node dist/test.js",
     "dev": "npx ts-node --esm src/index.ts",
