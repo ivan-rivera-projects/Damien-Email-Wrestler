@@ -1,3 +1,5 @@
+![Damien Email Wrestler Banner](./scripts/damian_md_logo.png)
+
 # 🤼‍♂️ Damien Email Wrestler
 
 **The AI-Powered Gmail Management Champion**
@@ -44,15 +46,54 @@ Damien Email Wrestler consists of three integrated components:
 - **Gmail Account**: With API access enabled
 - **Google Cloud Project**: For Gmail API credentials
 
-## 🛠️ Quick Start
+## 🚀 Quick Start
 
-### Option 1: Docker Compose (Recommended)
+**TL;DR**: Get Damien running in 2 minutes:
 
-1. **Clone the repository:**
+```bash
+git clone https://github.com/ivan-rivera-projects/Damien-Email-Wrestler.git
+cd Damien-Email-Wrestler
+./scripts/start.sh
+```
+
+**Need help?** Check the [detailed startup guide](scripts/README.md) or follow the options below.
+
+### Option 1: One-Command Startup (Recommended)
+
+**Perfect for:** Quick testing, demos, and production deployment
+
+1. **Clone and setup:**
    ```bash
    git clone https://github.com/ivan-rivera-projects/Damien-Email-Wrestler.git
    cd Damien-Email-Wrestler
+   
+   # Place your credentials.json file here (see Gmail API setup guide)
+   # Run the magic startup script
+   ./scripts/start.sh
    ```
+
+2. **Test your installation:**
+   ```bash
+   ./scripts/test.sh
+   ```
+
+3. **Connect to Claude Desktop:** Add to your Claude config:
+   ```json
+   {
+     "mcpServers": {
+       "damien-email-wrestler": {
+         "command": "node",
+         "args": ["/path/to/damien-smithery-adapter/dist/index.js"],
+         "env": {
+           "DAMIEN_MCP_SERVER_URL": "http://localhost:8892",
+           "DAMIEN_MCP_SERVER_API_KEY": "your-api-key-here"
+         }
+       }
+     }
+   }
+   ```
+
+### Option 2: Docker Compose (Manual Setup)
 
 2. **Set up Gmail API credentials:**
    ```bash
@@ -313,11 +354,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Built with the [Model Context Protocol](https://github.com/modelcontextprotocol/typescript-sdk)
 - Integrated with [Smithery SDK](https://github.com/smithery-ai/sdk)
 - Uses [Gmail API](https://developers.google.com/gmail/api) for email operations
-- Inspired by the need for better AI-powered email management
+- Inspired by Damien, the Python counterpart of Jake "the Snake" Roberts
 
 ## 📞 Support
 
-- 📧 Email: support@damien-email-wrestler.com
+- 📧 Email: ivan.rivera.email@gmail.com
 - 💬 GitHub Issues: [Create an issue](https://github.com/ivan-rivera-projects/Damien-Email-Wrestler/issues)
 - 📖 Documentation: [Wiki](https://github.com/ivan-rivera-projects/Damien-Email-Wrestler/wiki)
 

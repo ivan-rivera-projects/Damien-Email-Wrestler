@@ -53,10 +53,23 @@ fi
 echo ""
 echo "Testing tool discovery..."
 
-if curl -s http://localhost:8081/tools | grep -q "damien_list_emails"; then
-    test_passed "Tool discovery works"
+# Test Damien MCP Server tool listing (with authentication)
+if curl -s -H "X-API-Key: 7a508adf3ccf8b9376c312df8cebd488f3988f310afbdf5077d5d3ce63ed7c8f" http://localhost:8892/mcp/list_tools | grep -q "damien_list_emails"; then
+    test_passed "Damien MCP Server tool discovery works"
 else
-    test_failed "Tool discovery failed"
+    test_failed "Damien MCP Server tool discovery failed"
+fi
+
+# Test Smithery Adapter tool listing
+SMITHERY_TOOLS=$(curl -s http://localhost:8081/tools)
+if echo "$SMITHERY_TOOLS" | grep -q "damien_list_emails"; then
+    test_passed "Smithery Adapter tool discovery works"
+elif echo "$SMITHERY_TOOLS" | grep -q "test_tool"; then
+    test_failed "Smithery Adapter showing test_tool instead of real Damien tools"
+    echo "  Expected: damien_list_emails, Got: test_tool"
+else
+    test_failed "Smithery Adapter tool discovery failed completely"
+    echo "  Response: $SMITHERY_TOOLS"
 fi
 
 # Summary

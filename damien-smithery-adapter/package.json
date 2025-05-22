@@ -1,6 +1,6 @@
 {
   "name": "damien_smithery_adapter",
-  "version": "1.0.0",
+  "type": "module",
   "type": "module",
   "description": "Smithery SDK adapter for Damien MCP Server",
   "main": "dist/index.js",

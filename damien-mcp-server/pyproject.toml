@@ -14,7 +14,7 @@ boto3 = "^1.28.64"
 python-dotenv = "^1.0.0"
 pydantic = {extras = ["email"], version = "^2.4.2"}
 pydantic-settings = "^2.0.0"
-damien-cli-project = {path = "../damien_cli_project", develop = true}
+damien-cli-project = {path = "../damien-cli", develop = true}
 aioboto3 = "^12.3.0" # Added aioboto3
 
 [tool.poetry.group.dev.dependencies]
