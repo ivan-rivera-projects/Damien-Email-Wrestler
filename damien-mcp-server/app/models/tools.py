@@ -31,8 +31,8 @@ class ListEmailsParams(MCPToolCallInput):
         description="Optional Gmail search query string to filter emails (e.g., 'is:unread from:boss@example.com', 'subject:report older_than:7d'). If omitted, lists recent emails. See Gmail search operators: https://support.google.com/mail/answer/7190"
     )
     max_results: Optional[int] = Field(
-        default=10,
-        description="Optional. Maximum number of email summaries to return in this call. Default is 10. Must be > 0 and <= 100. Higher values may impact performance or hit API rate limits.",
+        default=100,
+        description="Optional. Maximum number of email summaries to return in this call. Default is 100. Must be > 0 and <= 100. Higher values may impact performance or hit API rate limits.",
         gt=0,
         le=100
     )
@@ -45,7 +45,7 @@ class ListEmailsParams(MCPToolCallInput):
         json_schema_extra={
             "example": {
                 "query": "is:unread from:newsletter@example.com subject:important",
-                "max_results": 25,
+                "max_results": 100,
                 "page_token": " nextPageTokenFromPreviousCall"
             }
         }
