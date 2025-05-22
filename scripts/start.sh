@@ -22,10 +22,18 @@ if ! command -v docker >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! command -v docker-compose >/dev/null 2>&1; then
+# Check for Docker Compose (try both old and new syntax)
+DOCKER_COMPOSE_CMD=""
+if command -v docker-compose >/dev/null 2>&1; then
+    DOCKER_COMPOSE_CMD="docker-compose"
+elif docker compose version >/dev/null 2>&1; then
+    DOCKER_COMPOSE_CMD="docker compose"
+else
     print_error "Docker Compose not found. Please install Docker Compose."
     exit 1
 fi
+
+print_success "Docker and Docker Compose are available ($DOCKER_COMPOSE_CMD)"
 
 # Check for required files
 if [ ! -f "credentials.json" ]; then
@@ -52,7 +60,7 @@ fi
 
 # Start services
 echo "Starting all services..."
-docker-compose up -d
+$DOCKER_COMPOSE_CMD up -d
 
 # Wait for services to be ready
 echo "Waiting for services to start..."
