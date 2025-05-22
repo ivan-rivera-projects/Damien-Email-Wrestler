@@ -1,0 +1,19 @@
+{
+  "name": "damien_trash_emails",
+  "description": "Moves one or more specified emails (by their IDs) to the Gmail Trash folder. Emails in Trash are typically deleted permanently after 30 days.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "message_ids": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "A list of unique email IDs to be moved to Trash."
+      }
+    },
+    "required": [
+      "message_ids"
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "damien_delete_rule",
+  "description": "Deletes an existing filtering rule from Damien, specified by its unique ID or name.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "rule_identifier": {
+        "type": "string",
+        "description": "The unique ID or the name of the rule to be deleted."
+      }
+    },
+    "required": [
+      "rule_identifier"
+    ]
+  }
+}

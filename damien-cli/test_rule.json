@@ -1,0 +1,6 @@
+{
+      "name": "Manual Test Rule CLI",
+      "description": "To be trashed by manual test",
+      "conditions": [{"field": "subject", "operator": "contains", "value": "Manual Test Email"}],
+      "actions": [{"type": "trash"}]
+    }

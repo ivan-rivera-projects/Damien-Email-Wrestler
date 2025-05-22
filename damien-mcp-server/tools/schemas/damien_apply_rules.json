@@ -1,0 +1,43 @@
+{
+  "name": "damien_apply_rules",
+  "description": "Applies configured filtering rules to emails in the Gmail account. Can operate on all emails or a filtered subset. Reports a summary of actions taken or planned.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "gmail_query_filter": {
+        "type": "string",
+        "description": "Optional. A Gmail search query to narrow down which emails are scanned for rule application (e.g., 'in:inbox is:unread')."
+      },
+      "rule_ids_to_apply": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Optional. A list of specific rule IDs or rule names to apply. If omitted, all enabled rules are considered."
+      },
+      "dry_run": {
+        "type": "boolean",
+        "description": "Optional. If true, simulates rule application and reports what actions *would* be taken without actually modifying any emails. Defaults to false (meaning actions will be executed). Recommended to use dry_run:true first for verification."
+      },
+      "scan_limit": {
+        "type": "integer",
+        "description": "Optional. Limits the total number of recent emails (or emails matching the main query) to fetch and consider for rule application. Useful for very large mailboxes or initial testing."
+      },
+      "date_after": {
+        "type": "string",
+        "format": "date",
+        "description": "Optional. Process emails received after this date (YYYY/MM/DD or YYYY-MM-DD)."
+      },
+      "date_before": {
+        "type": "string",
+        "format": "date",
+        "description": "Optional. Process emails received before this date (YYYY/MM/DD or YYYY-MM-DD)."
+      },
+      "all_mail": {
+        "type": "boolean",
+        "description": "Optional. If true, attempts to process all mail irrespective of date (unless other date filters are specified). Use with caution on large mailboxes; combine with scan_limit or specific queries. Defaults to processing recent mail (e.g., last 30 days if no other date filters)."
+      }
+    },
+    "required": []
+  }
+}

@@ -1,0 +1,110 @@
+graph TD
+    subgraph User_External_LLM_Orchestrator
+        U[User via Terminal]
+        ELO[External LLM Orchestrator (Planned)]
+    end
+
+    subgraph Damien_CLI_Application [Damien-CLI Application]
+        CLI_Entry[damien_cli.cli_entry.py <br> (Click, Cmd Groups & Dispatch)]
+
+        subgraph Core_Components [damien_cli.core]
+            CoreConfig[config.py]
+            CoreLogging[logging_setup.py]
+            CoreExceptions[exceptions.py (Core)]
+        end
+
+        subgraph Core_API_Layer [damien_cli.core_api]
+            GmailAPIService[gmail_api_service.py]
+            RulesAPIService[rules_api_service.py]
+            APIExceptions[exceptions.py (API Layer)]
+        end
+
+        subgraph Feature_Slices [damien_cli.features]
+            subgraph Email_Management [email_management]
+                EM_Commands[commands.py]
+                EM_Models[models.py]
+            end
+            subgraph Rule_Management [rule_management]
+                RM_Commands[commands.py]
+                RM_Models[models.py]
+            end
+            subgraph LLM_Analysis [llm_analysis (Planned)]
+                LLMA_Commands[commands.py]
+                LLMA_Models[models.py]
+            end
+        end
+
+        subgraph Integrations_Layer [damien_cli.integrations]
+            GmailIntegration[gmail_integration.py <br> (OAuth, Low-level Gmail API Calls)]
+        end
+        
+        subgraph Data_Storage [Local Data Files ./data/]
+            TokenFile[token.json]
+            RulesFile[rules.json]
+            LogFile[damien_session.log]
+            CredentialsFile[credentials.json (User Provided)]
+        end
+    end
+
+    subgraph External_Services_APIs
+        GoogleGmailAPI[Google Gmail API]
+        ExternalLLM_API[External LLM APIs (Planned)]
+    end
+
+    %% User/Orchestrator Interaction
+    U --> CLI_Entry;
+    ELO --> CLI_Entry;
+
+    %% CLI Entry Point Interactions
+    CLI_Entry --> CoreConfig;
+    CLI_Entry --> CoreLogging;
+    CLI_Entry --> CoreExceptions;
+    CLI_Entry --> GmailAPIService; %% For non-interactive pre-load
+    CLI_Entry --> EM_Commands;
+    CLI_Entry --> RM_Commands;
+    CLI_Entry --> LLMA_Commands;
+
+    %% Feature Command Interactions
+    EM_Commands --> GmailAPIService;
+    EM_Commands --> EM_Models;
+    RM_Commands --> RulesAPIService;
+    RM_Commands --> RM_Models;
+    LLMA_Commands --> GmailAPIService; %% Example: to fetch emails
+    LLMA_Commands --> ExternalLLM_API; %% Via a potential future LLM integration module
+    LLMA_Commands --> LLMA_Models;
+
+    %% Core API Layer Interactions
+    GmailAPIService --> GmailIntegration;
+    GmailAPIService --> APIExceptions;
+    RulesAPIService --> RulesFile;
+    RulesAPIService --> APIExceptions;
+
+    %% Integrations Layer Interactions
+    GmailIntegration --> GoogleGmailAPI;
+    GmailIntegration --> TokenFile;      %% Manages token
+    GmailIntegration --> CredentialsFile; %% Reads client secrets
+
+    %% Core Component Interactions
+    CoreLogging --> LogFile;
+    CoreConfig --> TokenFile;      %% Defines path
+    CoreConfig --> RulesFile;      %% Defines path
+    CoreConfig --> CredentialsFile; %% Defines path
+    
+    %% Styling
+    classDef user fill:#c9f,stroke:#333,stroke-width:2px;
+    classDef cliEntry fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef coreComp fill:#ffc,stroke:#333,stroke-width:2px;
+    classDef coreApi fill:#fcc,stroke:#333,stroke-width:2px;
+    classDef featureSlice fill:#cff,stroke:#333,stroke-width:2px;
+    classDef integrationLayer fill:#9cf,stroke:#333,stroke-width:2px;
+    classDef dataStore fill:#lightgrey,stroke:#333,stroke-width:2px;
+    classDef externalApi fill:#9f9,stroke:#333,stroke-width:2px;
+
+    class U,ELO user;
+    class CLI_Entry cliEntry;
+    class CoreConfig,CoreLogging,CoreExceptions coreComp;
+    class GmailAPIService,RulesAPIService,APIExceptions coreApi;
+    class EM_Commands,EM_Models,RM_Commands,RM_Models,LLMA_Commands,LLMA_Models featureSlice;
+    class GmailIntegration integrationLayer;
+    class TokenFile,RulesFile,LogFile,CredentialsFile dataStore;
+    class GoogleGmailAPI,ExternalLLM_API externalApi;

@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+# IDE specific
+.vscode/
+.idea/
+# Pytest
+.pytest_cache/
+htmlcov/
+.coverage
+# Other
+*.log
+*.sqlite
+logs/
+# macOS
+.DS_Store
+# Documentation - not public yet
+docs/
+# Files with sensitive API keys
+tools/claude_api_test_simple.py
+tools/claude_api_test_v2.py

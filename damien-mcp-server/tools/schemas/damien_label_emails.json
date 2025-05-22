@@ -1,0 +1,33 @@
+{
+  "name": "damien_label_emails",
+  "description": "Adds or removes specified labels from one or more emails. Provide label names as seen in Gmail.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "message_ids": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "A list of unique email IDs to modify."
+      },
+      "add_label_names": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Optional. A list of label names to add to the emails (e.g., ['Important', 'ProjectX']). System labels like 'STARRED' or 'IMPORTANT' can be used."
+      },
+      "remove_label_names": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Optional. A list of label names to remove from the emails (e.g., ['OldProject', 'UNREAD']). System labels like 'UNREAD' or 'INBOX' can be used."
+      }
+    },
+    "required": [
+      "message_ids"
+    ]
+  }
+}

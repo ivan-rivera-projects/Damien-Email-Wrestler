@@ -1,0 +1,25 @@
+{
+  "name": "damien_get_email_details",
+  "description": "Retrieves detailed information for a specific email using its unique ID. Can fetch metadata, full content, or raw format.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "message_id": {
+        "type": "string",
+        "description": "The unique ID of the email to retrieve. This ID is typically obtained from a 'damien_list_emails' call."
+      },
+      "format": {
+        "type": "string",
+        "enum": [
+          "metadata",
+          "full",
+          "raw"
+        ],
+        "description": "Optional. The level of detail to retrieve. 'metadata' for headers and snippet (fastest), 'full' for parsed content including body, 'raw' for the complete raw email. Defaults to 'full'."
+      }
+    },
+    "required": [
+      "message_id"
+    ]
+  }
+}

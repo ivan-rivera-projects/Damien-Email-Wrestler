@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.env
+.venv
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+pip-selfcheck.json
+
+# Poetry
+.poetry/
+poetry.lock # Some people commit this, some don't. For an app, it's good to commit it.
+            # Let's commit it for now. So, maybe comment this out or remove.
+# .pdm.toml
+# .pdm.lock
+# pdm.lock
+
+# Data files
+credentials.json
+data/token.json
+data/*.log
+# credentials.json # IMPORTANT: You will add credentials.json to this list
+                   # AFTER you ensure your private repo setup or alternative secret management.
+                   # For now, IF THIS IS A PRIVATE REPO, you can omit this line.
+                   # IF IT'S PUBLIC, ADD `credentials.json` HERE IMMEDIATELY.
+
+# IDE / Editor specific
+.vscode/
+.idea/
+*.swp
+*~
+
+# macOS
+.DS_Store
+
+# Backup files
+*.bak
+
+# User-specific rules file
+data/rules.json

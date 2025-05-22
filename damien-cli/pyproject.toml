@@ -1,0 +1,38 @@
+[tool.poetry]
+name = "damien-cli-project"
+version = "0.1.0"
+description = "A CLI tool to manage Gmail with LLM capabilities."
+authors = ["ivan-rivera-projects <ivan.rivera.email@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+# Tells Poetry that the actual Python package code is in the 'damien_cli' directory.
+packages = [
+    { include = "damien_cli" }
+]
+
+[tool.poetry.dependencies]
+# The Python version constraint is specified here as 'python'.
+python = ">=3.13"
+
+# Main application dependencies are listed here.
+click = ">=8.2.0,<9.0.0"
+google-api-python-client = ">=2.169.0,<3.0.0"
+google-auth-oauthlib = ">=1.2.2,<2.0.0"
+google-auth-httplib2 = ">=0.2.0,<0.3.0"
+pydantic = "^2.11.4"
+
+[tool.poetry.group.dev.dependencies]
+# Development-specific dependencies.
+pytest = "^8.3.5"
+pytest-cov = "^6.1.1"
+black = "^25.1.0"
+flake8 = "^7.2.0"
+
+[tool.poetry.scripts]
+damien = "damien_cli.cli_entry:damien"
+
+[build-system]
+# Standard build system configuration for Poetry projects.
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

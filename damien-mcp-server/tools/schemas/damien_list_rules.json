@@ -1,0 +1,9 @@
+{
+  "name": "damien_list_rules",
+  "description": "Lists all currently configured filtering rules in Damien.",
+  "input_schema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  }
+}

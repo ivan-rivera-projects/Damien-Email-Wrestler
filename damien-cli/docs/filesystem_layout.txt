@@ -1,0 +1,85 @@
+damien_cli_project/
+├── damien_cli/                     # Main application package (source root)
+│   ├── __init__.py                 # Makes 'damien_cli' a package
+│   │
+│   ├── cli_entry.py                # Main CLI definition (using Click/Typer)
+│   │                                 # Defines top-level commands like `damien analyze`, `damien clean`
+│   │                                 # and groups like `damien emails`, `damien rules`
+│   │
+│   ├── core/                       # Shared core components, utilities, base classes
+│   │   ├── __init__.py
+│   │   ├── config.py               # Configuration loading and management
+│   │   ├── logging_setup.py        # Centralized logging configuration
+│   │   ├── exceptions.py           # Core custom application exceptions
+│   │   └── utils.py                # General utility functions (optional)
+│   │
+│   ├── core_api/                   # Service layer abstracting backend logic
+│   │   ├── __init__.py
+│   │   ├── gmail_api_service.py    # Business logic for Gmail operations
+│   │   ├── rules_api_service.py    # Business logic for rule management (CRUD, matching)
+│   │   └── exceptions.py           # Custom exceptions for the API service layer
+│   │
+│   ├── features/                   # Root for feature slices
+│   │   ├── __init__.py
+│   │   │
+│   │   ├── email_management/       # Slice for managing emails (CRUD, listing, etc.)
+│   │   │   ├── __init__.py
+│   │   │   ├── commands.py         # CLI subcommands for 'damien emails ...' (uses core_api)
+│   │   │   └── models.py           # Pydantic models or dataclasses for email data
+│   │   │
+│   │   ├── rule_management/        # Slice for managing filtering rules
+│   │   │   ├── __init__.py
+│   │   │   ├── commands.py         # CLI subcommands for 'damien rules ...' (uses core_api)
+│   │   │   └── models.py           # Rule data structures
+│   │   │
+│   │   ├── llm_analysis/           # Slice for direct LLM interaction features (Planned)
+│   │   │   ├── __init__.py
+│   │   │   ├── commands.py         # CLI subcommands for `damien analyze`, `damien clean` (if it invokes analysis)
+│   │   │   ├── service.py          # Logic for interacting with LLMs, processing results
+│   │   │   ├── models.py           # Data structures for LLM requests/responses, analysis results
+│   │   │   └── providers/          # (Optional) Sub-package for different LLM provider integrations
+│   │   │       ├── __init__.py
+│   │   │       ├── base_provider.py
+│   │   │       └── openai_provider.py
+│   │   │
+│   │   ├── unsubscribe/            # Slice for unsubscribe functionality
+│   │   │   ├── __init__.py
+│   │   │   ├── commands.py         # CLI subcommand for 'damien emails unsubscribe'
+│   │   │   └── service.py          # Logic for finding and handling unsubscribe links
+│   │   │
+│   │   └── (other_features_as_needed)/
+│   │
+│   └── integrations/               # External service integrations (low-level wrappers)
+│       ├── __init__.py
+│       ├── gmail_integration.py    # Low-level wrapper for Gmail API (OAuth, direct calls)
+│       └── (other_integrations_as_needed)/
+│
+├── tests/                          # Tests directory
+│   ├── __init__.py
+│   ├── core/                       # Tests for damien_cli.core components
+│   │   └── test_config.py
+│   │   └── test_logging_setup.py
+│   ├── core_api/                   # Tests for damien_cli.core_api services
+│   │   ├── __init__.py
+│   │   ├── test_gmail_api_service.py
+│   │   └── test_rules_api_service.py
+│   ├── features/                   # Tests for feature slices
+│   │   ├── __init__.py
+│   │   ├── email_management/
+│   │   │   └── test_commands.py
+│   │   ├── rule_management/
+│   │   │   ├── test_commands.py
+│   │   │   └── test_models.py
+│   │   └── ... (mirrors other features)
+│   └── integrations/               # Tests for damien_cli.integrations
+│       └── test_gmail_integration.py
+│
+├── .env.example                    # Example environment variables file
+├── .gitignore
+├── pyproject.toml                  # Project metadata, dependencies (e.g., for Poetry/PDM)
+├── README.md
+├── credentials.json                # (User-provided, in .gitignore)
+└── data/                           # User-specific runtime data (created by app)
+    ├── token.json                  # (In .gitignore)
+    ├── rules.json                  # (In .gitignore or user-configurable path)
+    └── damien_session.log          # (In .gitignore or user-configurable path)

@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "damienmcp-server"
+version = "0.1.0"
+description = "MCP Server for Damien-CLI functionalities"
+authors = ["Ivan Rivera <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "app"}] # Changed from damien_mcp_server
+
+[tool.poetry.dependencies]
+python = ">=3.13, <4.0" # Added upper bound to align with dependencies
+fastapi = "^0.104.0"
+uvicorn = {extras = ["standard"], version = "^0.23.2"}
+boto3 = "^1.28.64"
+python-dotenv = "^1.0.0"
+pydantic = {extras = ["email"], version = "^2.4.2"}
+pydantic-settings = "^2.0.0"
+damien-cli-project = {path = "../damien_cli_project", develop = true}
+aioboto3 = "^12.3.0" # Added aioboto3
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.2"
+pytest-asyncio = "^0.21.0" # Or a more recent compatible version
+httpx = "^0.25.0"
+black = "^23.10.0"
+flake8 = "^6.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

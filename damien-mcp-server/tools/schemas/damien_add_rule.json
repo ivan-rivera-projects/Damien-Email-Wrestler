@@ -1,0 +1,62 @@
+{
+  "name": "damien_add_rule",
+  "description": "Adds a new filtering rule to Damien. The rule definition must be a valid JSON object matching Damien's rule structure.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "rule_definition": {
+        "type": "object",
+        "description": "A JSON object defining the rule. Must include 'name' (string), 'conditions' (array of condition objects), and 'actions' (array of action objects). Optional fields: 'description' (string), 'is_enabled' (boolean, defaults to true), 'condition_conjunction' (string 'AND' or 'OR', defaults to 'AND'). Example condition: {'field': 'from', 'operator': 'contains', 'value': 'spam@example.com'}. Example action: {'type': 'trash'}.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "is_enabled": {
+            "type": "boolean"
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "operator": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "condition_conjunction": {
+            "type": "string",
+            "enum": [
+              "AND",
+              "OR"
+            ]
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "conditions",
+          "actions"
+        ]
+      }
+    },
+    "required": [
+      "rule_definition"
+    ]
+  }
+}

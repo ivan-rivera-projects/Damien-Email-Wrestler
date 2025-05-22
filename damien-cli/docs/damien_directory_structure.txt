@@ -1,0 +1,115 @@
+graph TD
+    subgraph User_Interaction
+        User[User via Terminal]
+    end
+
+    subgraph DamienCLI_EntryPoint [damien_cli.cli_entry.py]
+        CLI[CLI Interface (Click/Typer)]
+    end
+
+    subgraph Core_Shared_Components [damien_cli.core]
+        Config[config.py]
+        CoreLogging[logging_setup.py]
+        CoreUtils[utils.py (Optional)]
+        CoreExceptions[exceptions.py (Core)]
+    end
+
+    subgraph CoreAPILayer [damien_cli.core_api]
+        GmailAPIService[gmail_api_service.py]
+        RulesAPIService[rules_api_service.py]
+        APIExceptions[exceptions.py (API)]
+    end
+
+    subgraph FeatureSlices [damien_cli.features]
+        subgraph EmailManagementSlice [email_management]
+            EM_Cmd[commands.py]
+            EM_Mod[models.py]
+        end
+
+        subgraph RuleManagementSlice [rule_management]
+            RM_Cmd[commands.py]
+            RM_Mod[models.py]
+        end
+
+        subgraph LLMAnalysisSlice [llm_analysis (Planned)]
+            LLMA_Cmd[commands.py]
+            LLMA_Mod[models.py]
+        end
+
+        subgraph UnsubscribeSlice [unsubscribe (Planned)]
+            US_Cmd[commands.py]
+        end
+    end
+
+    subgraph Integrations [damien_cli.integrations]
+        GmailInt[gmail_integration.py (Auth & Low-level Gmail API)]
+        LLMIntProvider[(llm_analysis.providers) (Planned)]
+    end
+    
+    subgraph DataStorage [Local Data ./data/]
+        TokenJSON[token.json]
+        RulesJSON[rules.json]
+        SessionLog[damien_session.log]
+    end
+
+    subgraph ExternalServices
+        GmailAPI[Google Gmail API]
+        LLMAPI[LLM APIs (Planned)]
+    end
+
+    %% Flow
+    User --> CLI
+
+    CLI -->|Uses| Config
+    CLI -->|Uses| CoreLogging
+    CLI -->|Uses| CoreExceptions
+    CLI -->|Initializes & Uses| GmailAPIService %% For non-interactive auth attempt
+    CLI -->|Routes to Feature Commands| EM_Cmd
+    CLI -->|Routes to Feature Commands| RM_Cmd
+    CLI -->|Routes to Feature Commands| LLMA_Cmd
+    CLI -->|Routes to Feature Commands| US_Cmd
+
+    EM_Cmd -->|Uses| GmailAPIService
+    EM_Cmd -->|Uses| EM_Mod
+    
+    RM_Cmd -->|Uses| RulesAPIService
+    RM_Cmd -->|Uses| RM_Mod
+
+    LLMA_Cmd -->|Uses| GmailAPIService %% For fetching emails
+    LLMA_Cmd -->|Uses| LLMIntProvider
+    LLMA_Cmd -->|Uses| LLMA_Mod
+    
+    US_Cmd -->|Uses| GmailAPIService %% For unsubscribe actions
+
+    GmailAPIService -->|Uses| GmailInt
+    GmailAPIService -->|Uses| APIExceptions
+    RulesAPIService -->|Uses| RulesJSON
+    RulesAPIService -->|Uses| APIExceptions
+    
+    GmailInt -->|Interacts with| GmailAPI
+    GmailInt -->|Manages| TokenJSON
+    LLMIntProvider -->|Interacts with| LLMAPI
+    
+    CoreLogging --> SessionLog
+    Config --> TokenJSON %% For path
+    Config --> RulesJSON %% For path
+
+
+    classDef entrypoint fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef corecomp fill:#ffc,stroke:#333,stroke-width:2px;
+    classDef coreapi fill:#fcc,stroke:#333,stroke-width:2px;
+    classDef feature fill:#cff,stroke:#333,stroke-width:2px;
+    classDef integration fill:#9cf,stroke:#333,stroke-width:2px;
+    classDef datastore fill:#lightgrey,stroke:#333,stroke-width:2px;
+    classDef external fill:#9f9,stroke:#333,stroke-width:2px;
+
+    class CLI entrypoint;
+    class Config,CoreLogging,CoreUtils,CoreExceptions corecomp;
+    class GmailAPIService,RulesAPIService,APIExceptions coreapi;
+    class EM_Cmd,EM_Mod feature;
+    class RM_Cmd,RM_Mod feature;
+    class LLMA_Cmd,LLMA_Mod feature;
+    class US_Cmd feature;
+    class GmailInt,LLMIntProvider integration;
+    class TokenJSON,RulesJSON,SessionLog datastore;
+    class GmailAPI,LLMAPI external;

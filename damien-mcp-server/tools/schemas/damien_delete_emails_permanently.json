@@ -1,0 +1,19 @@
+{
+  "name": "damien_delete_emails_permanently",
+  "description": "CRITICAL WARNING: Permanently deletes one or more specified emails. This action is IRREVERSIBLE and emails CANNOT be recovered. Use with extreme caution. Emails are removed completely and do not go to Trash.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "message_ids": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "A list of unique email IDs to be PERMANENTLY DELETED. Double-check these IDs carefully."
+      }
+    },
+    "required": [
+      "message_ids"
+    ]
+  }
+}

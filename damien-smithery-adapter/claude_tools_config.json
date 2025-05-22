@@ -1,0 +1,243 @@
+{
+  "tools": [
+    {
+      "name": "damien_list_emails",
+      "description": "Lists email messages based on a query, with support for pagination. Provides summaries including ID, thread ID, subject, sender, snippet, date, attachment status, and labels.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Optional Gmail search query string to filter emails (e.g., 'is:unread from:boss@example.com', 'subject:report older_than:7d'). If omitted, lists recent emails."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Optional. Maximum number of email summaries to return in this call. Default is 10. Must be > 0 and <= 100.",
+            "default": 10
+          },
+          "page_token": {
+            "type": "string",
+            "description": "Optional. An opaque token received from a previous 'damien_list_emails' call to fetch the next page of results."
+          }
+        }
+      },
+      "execution": {
+        "type": "http",
+        "method": "POST",
+        "url": "http://localhost:8081/execute",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "transform_payload": {
+          "tool": "damien_list_emails",
+          "input": "$INPUT",
+          "session_id": "$SESSION_ID"
+        }
+      }
+    },
+    {
+      "name": "damien_get_email_details",
+      "description": "Retrieves the full details of a specific email message, including headers, payload (body, parts), and raw content based on the specified format.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "description": "The unique immutable ID of the email message to retrieve."
+          },
+          "format": {
+            "type": "string",
+            "description": "Specifies the level of detail for the email. 'full' returns complete data including payload. 'metadata' returns headers and snippet. 'raw' returns the full email as a raw, RFC 2822 formatted string (base64url encoded).",
+            "default": "full"
+          }
+        },
+        "required": ["message_id"]
+      },
+      "execution": {
+        "type": "http",
+        "method": "POST",
+        "url": "http://localhost:8081/execute",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "transform_payload": {
+          "tool": "damien_get_email_details",
+          "input": "$INPUT",
+          "session_id": "$SESSION_ID"
+        }
+      }
+    },
+    {
+      "name": "damien_trash_emails",
+      "description": "Moves specified emails to the trash folder. Returns a count of trashed emails and a status message.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "A list of unique message IDs to be moved to the trash folder."
+          }
+        },
+        "required": ["message_ids"]
+      },
+      "execution": {
+        "type": "http",
+        "method": "POST",
+        "url": "http://localhost:8081/execute",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "transform_payload": {
+          "tool": "damien_trash_emails",
+          "input": "$INPUT",
+          "session_id": "$SESSION_ID"
+        }
+      }
+    },
+    {
+      "name": "damien_label_emails",
+      "description": "Adds or removes specified labels from emails. Returns a count of modified emails and a status message.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "A list of unique message IDs to apply label changes to."
+          },
+          "add_label_names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional. List of label names to add to the specified emails. System labels (e.g., 'IMPORTANT', 'STARRED') and custom label names are supported."
+          },
+          "remove_label_names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional. List of label names to remove from the specified emails. System labels (e.g., 'UNREAD') and custom label names are supported."
+          }
+        },
+        "required": ["message_ids"]
+      },
+      "execution": {
+        "type": "http",
+        "method": "POST",
+        "url": "http://localhost:8081/execute",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "transform_payload": {
+          "tool": "damien_label_emails",
+          "input": "$INPUT",
+          "session_id": "$SESSION_ID"
+        }
+      }
+    },
+    {
+      "name": "damien_mark_emails",
+      "description": "Marks specified emails as read or unread. Returns a count of modified emails and a status message.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "A list of unique message IDs to mark as read or unread."
+          },
+          "mark_as": {
+            "type": "string",
+            "description": "Specify whether to mark messages as 'read' or 'unread'.",
+            "enum": ["read", "unread"]
+          }
+        },
+        "required": ["message_ids", "mark_as"]
+      },
+      "execution": {
+        "type": "http",
+        "method": "POST",
+        "url": "http://localhost:8081/execute",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "transform_payload": {
+          "tool": "damien_mark_emails",
+          "input": "$INPUT",
+          "session_id": "$SESSION_ID"
+        }
+      }
+    },
+    {
+      "name": "damien_apply_rules",
+      "description": "Applies filtering rules to emails in your Gmail account based on various criteria. Can be run in dry-run mode. Returns a detailed summary of actions taken or that would be taken.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "gmail_query_filter": {
+            "type": "string",
+            "description": "Optional. Base Gmail query string to narrow down messages for rule application."
+          },
+          "rule_ids_to_apply": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional. A list of specific rule IDs to apply. If omitted, all enabled rules stored in Damien are considered for application against the message set."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "If True, the tool will simulate rule application and return a summary of actions that would be taken, without making any actual changes to emails.",
+            "default": false
+          },
+          "scan_limit": {
+            "type": "integer",
+            "description": "Optional. Limits the number of messages scanned from the Gmail query results for rule application. Useful for testing or performing partial runs on large mailboxes."
+          }
+        }
+      },
+      "execution": {
+        "type": "http",
+        "method": "POST",
+        "url": "http://localhost:8081/execute",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "transform_payload": {
+          "tool": "damien_apply_rules",
+          "input": "$INPUT",
+          "session_id": "$SESSION_ID"
+        }
+      }
+    },
+    {
+      "name": "damien_list_rules",
+      "description": "Lists all configured filtering rules in Damien, including their definitions (name, conditions, actions).",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      },
+      "execution": {
+        "type": "http",
+        "method": "POST",
+        "url": "http://localhost:8081/execute",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "transform_payload": {
+          "tool": "damien_list_rules",
+          "input": "$INPUT",
+          "session_id": "$SESSION_ID"
+        }
+      }
+    }
+  ]
+}

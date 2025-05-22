@@ -1,0 +1,147 @@
+version: '3.8'
+
+services:
+  # Core Damien CLI - The foundation email management system
+  damien-cli:
+    build:
+      context: ./damien-cli
+      dockerfile: Dockerfile
+    container_name: damien-cli
+    volumes:
+      # Persist authentication tokens and data
+      - damien_data:/app/data
+      - ./credentials.json:/app/credentials.json:ro
+      # Mount rules and logs for persistence
+      - damien_rules:/app/rules
+    environment:
+      - DAMIEN_LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - damien-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import damien_cli; print('OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Damien MCP Server - Exposes CLI functionality via MCP protocol
+  damien-mcp-server:
+    build:
+      context: ./damien-mcp-server
+      dockerfile: Dockerfile
+    container_name: damien-mcp-server
+    ports:
+      - "${DAMIEN_MCP_SERVER_PORT:-8892}:8892"
+    depends_on:
+      damien-cli:
+        condition: service_healthy
+    volumes:
+      # Share authentication and data with CLI
+      - damien_data:/app/data
+      - ./credentials.json:/app/credentials.json:ro
+      - damien_rules:/app/rules
+    environment:
+      # Server Configuration
+      - DAMIEN_MCP_SERVER_API_KEY=${DAMIEN_MCP_SERVER_API_KEY}
+      - DAMIEN_MCP_SERVER_PORT=8892
+      
+      # Gmail Configuration
+      - DAMIEN_GMAIL_TOKEN_JSON_PATH=/app/data/token.json
+      - DAMIEN_GMAIL_CREDENTIALS_JSON_PATH=/app/credentials.json
+      
+      # DynamoDB Configuration (Optional)
+      - DAMIEN_DYNAMODB_SESSION_TABLE_NAME=${DYNAMODB_TABLE_NAME:-DamienMCPSessions}
+      - DAMIEN_DYNAMODB_REGION=${AWS_REGION:-us-east-1}
+      - DAMIEN_DYNAMODB_SESSION_TTL_SECONDS=86400
+      
+      # AWS Configuration
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      
+      # Logging
+      - DAMIEN_LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DAMIEN_DEFAULT_USER_ID=damien_user_default
+    networks:
+      - damien-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8892/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Smithery Adapter - Makes Damien discoverable via Smithery Registry
+  damien-smithery-adapter:
+    build:
+      context: ./damien-smithery-adapter
+      dockerfile: Dockerfile
+    container_name: damien-smithery-adapter
+    ports:
+      - "${SMITHERY_ADAPTER_PORT:-8081}:8081"
+    depends_on:
+      damien-mcp-server:
+        condition: service_healthy
+    environment:
+      # Damien MCP Server Connection
+      - DAMIEN_MCP_SERVER_URL=http://damien-mcp-server:8892
+      - DAMIEN_MCP_SERVER_API_KEY=${DAMIEN_MCP_SERVER_API_KEY}
+      
+      # Smithery Configuration
+      - SERVER_PORT=8081
+      - SERVER_NAME=Damien Email Wrestler
+      - SERVER_VERSION=1.0.0
+      - SMITHERY_BEARER_AUTH=${SMITHERY_BEARER_AUTH}
+      
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - damien-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: DynamoDB Local for development/testing
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: damien-dynamodb-local
+    ports:
+      - "8000:8000"
+    environment:
+      - AWS_ACCESS_KEY_ID=dummy
+      - AWS_SECRET_ACCESS_KEY=dummy
+      - AWS_DEFAULT_REGION=us-east-1
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    networks:
+      - damien-network
+    profiles:
+      - development
+    restart: unless-stopped
+
+# Persistent volumes for data storage
+volumes:
+  damien_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data
+  damien_rules:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./rules
+
+# Internal network for service communication
+networks:
+  damien-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

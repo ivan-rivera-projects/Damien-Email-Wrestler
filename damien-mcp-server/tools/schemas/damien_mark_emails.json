@@ -1,0 +1,28 @@
+{
+  "name": "damien_mark_emails",
+  "description": "Marks one or more specified emails as 'read' or 'unread'.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "message_ids": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "A list of unique email IDs to mark."
+      },
+      "mark_as": {
+        "type": "string",
+        "enum": [
+          "read",
+          "unread"
+        ],
+        "description": "The state to mark the emails: 'read' or 'unread'."
+      }
+    },
+    "required": [
+      "message_ids",
+      "mark_as"
+    ]
+  }
+}
