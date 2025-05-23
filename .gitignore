@@ -15,6 +15,8 @@ service_account*.json
 .env.development
 .env.production
 .env.staging
+.env.old
+oldenv.txt
 
 # Authentication Tokens
 token.json
@@ -28,6 +30,14 @@ refresh_token.json
 *.pfx
 api_keys.txt
 secrets.txt
+
+# Scripts with hardcoded credentials (if any exist)
+*-with-key.sh
+*-local.sh
+scripts/*-dev.sh
+scripts/*-test.sh
+claude-integration.sh
+**/claude-integration.sh
 
 # AWS Credentials
 .aws/
