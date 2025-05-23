@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Example script showing how to properly load environment variables
+# This template can be used as a starting point for new scripts
+
+# Load environment variables from .env file
+if [ -f ".env" ]; then
+    # Export variables, ignoring comments and empty lines
+    export $(grep -v '^#' .env | grep -v '^$' | xargs)
+else
+    echo "Error: .env file not found"
+    echo "Please create a .env file from .env.example"
+    exit 1
+fi
+
+# Verify required environment variables are set
+required_vars=(
+    "DAMIEN_MCP_SERVER_API_KEY"
+    "DAMIEN_MCP_SERVER_URL"
+    "DAMIEN_MCP_SERVER_PORT"
+    "SMITHERY_ADAPTER_PORT"
+)
+
+missing_vars=()
+for var in "${required_vars[@]}"; do
+    if [ -z "${!var}" ]; then
+        missing_vars+=("$var")
+    fi
+done
+
+if [ ${#missing_vars[@]} -ne 0 ]; then
+    echo "Error: Missing required environment variables:"
+    printf ' - %s\n' "${missing_vars[@]}"
+    echo ""
+    echo "Please check your .env file"
+    exit 1
+fi
+
+# Now you can safely use the environment variables
+echo "Environment loaded successfully!"
+echo "MCP Server URL: $DAMIEN_MCP_SERVER_URL"
+echo "MCP Server Port: $DAMIEN_MCP_SERVER_PORT"
+echo "Smithery Adapter Port: $SMITHERY_ADAPTER_PORT"
+# Never echo sensitive values like API keys
+
+# Example of using the API key in a curl command
+# curl -H "X-API-Key: $DAMIEN_MCP_SERVER_API_KEY" "$DAMIEN_MCP_SERVER_URL/health"

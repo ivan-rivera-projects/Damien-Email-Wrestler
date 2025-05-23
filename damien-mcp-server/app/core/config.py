@@ -32,6 +32,7 @@ class Settings(BaseSettings): # Changed to BaseSettings
     app_name: str = "DamienMCPServer"
     api_key: str = Field(default="", alias="DAMIEN_MCP_SERVER_API_KEY") # Use Field with alias
     log_level: str = Field(default="INFO", alias="DAMIEN_LOG_LEVEL")
+    log_file_path: Optional[str] = Field(default=None, alias="DAMIEN_MCP_LOG_FILE_PATH") # Added for MCP server log file
     
     # Path settings
     gmail_token_path: str = Field(default="", alias="DAMIEN_GMAIL_TOKEN_JSON_PATH")

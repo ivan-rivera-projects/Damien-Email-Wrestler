@@ -8,11 +8,17 @@ import uuid
 
 
 class ConditionModel(BaseModel):
-    field: Literal["from", "subject", "body_snippet", "to", "label"]
-    operator: Literal[
-        "contains", "not_contains", "equals", "not_equals", "starts_with", "ends_with"
+    field: Literal[
+        "from", "subject", "body_snippet", "to", "label", # Existing
+        "date_age", "has_attachment", "attachment_filename", "message_size" # New
     ]
-    value: str
+    operator: Literal[
+        "contains", "not_contains", "equals", "not_equals", "starts_with", "ends_with", # Existing
+        "older_than", "newer_than", # For date_age (value like "7d", "2m")
+        "is", # For has_attachment (value "true" or "false")
+        "greater_than", "less_than" # For message_size (value like "1M", "500K")
+    ]
+    value: str # Value will be interpreted based on field and operator
 
 
 class ActionModel(BaseModel):

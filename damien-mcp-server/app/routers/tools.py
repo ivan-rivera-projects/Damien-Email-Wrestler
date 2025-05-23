@@ -27,19 +27,17 @@ from ..models.tools import (
     LabelEmailsParams, LabelEmailsOutput,
     MarkEmailsParams, MarkEmailsOutput,
     ApplyRulesParams, ApplyRulesOutput,
-    # For ListRulesOutput, AddRuleOutput, DeleteRuleOutputData, DeleteEmailsPermanentlyOutputData
-    # we used specific Pydantic models in tools.py, so we need to import them.
-    # Assuming ListRulesOutput is a model, not just a type alias anymore.
-    # If they are still type aliases, this part of the import would be different.
-    # Based on the previous diff, these should be actual Pydantic models now.
-    ListRulesOutput, # Was ListRulesOutputData = List[Dict[str, Any]]
-    AddRuleParams, AddRuleOutput, # Was AddRuleOutputData = Dict[str, Any]
-    DeleteRuleParams, DeleteRuleOutput, # Was DeleteRuleOutputData (BaseModel)
-    DeleteEmailsPermanentlyParams, DeleteEmailsPermanentlyOutput # Was DeleteEmailsPermanentlyOutputData (BaseModel)
+    ListRulesParams, # New Params model for list_rules
+    ListRulesOutput,
+    RuleModelOutput, # For GetRuleDetailsOutput
+    GetRuleDetailsParams, # New tool
+    AddRuleParams, AddRuleOutput,
+    DeleteRuleParams, DeleteRuleOutput,
+    DeleteEmailsPermanentlyParams, DeleteEmailsPermanentlyOutput
 )
 
 # Set up logger
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("damien_mcp_server_app") # Use the configured app logger
 
 # Create router
 router = APIRouter()
@@ -128,10 +126,16 @@ async def execute_tool_endpoint(
                 api_response = await adapter.list_emails_tool(
                     query=list_emails_params.query,
                     max_results=list_emails_params.max_results,
-                    page_token=list_emails_params.page_token
+                    page_token=list_emails_params.page_token,
+                    include_headers=list_emails_params.include_headers # Pass new field
                 )
-            if api_response.get("success"): tool_output_data = api_response.get("data")
-            else: is_error_flag = True; error_message = api_response.get("error_message", "Unknown error from list_emails tool.")
+            # Ensure api_response is checked before accessing .get, in case of validation error
+            if not is_error_flag and api_response.get("success"):
+                tool_output_data = api_response.get("data")
+            elif not is_error_flag: # Implies api_response exists but success is false
+                is_error_flag = True
+                error_message = api_response.get("error_message", "Unknown error from list_emails tool.")
+            # If is_error_flag was already true from validation, error_message is already set
         
         elif tool_name == "damien_get_email_details":
             try:
@@ -140,10 +144,17 @@ async def execute_tool_endpoint(
                 is_error_flag = True; error_message = f"Invalid parameters for {tool_name}: {e.errors()}"
             if not is_error_flag:
                 api_response = await adapter.get_email_details_tool(
-                    message_id=get_details_params.message_id, format_option=get_details_params.format
+                    message_id=get_details_params.message_id,
+                    format_option=get_details_params.format,
+                    include_headers=get_details_params.include_headers # Pass new field
                 )
-                if api_response.get("success"): tool_output_data = api_response.get("data")
-                else: is_error_flag = True; error_message = api_response.get("error_message", "Unknown error from damien_get_email_details tool.")
+                # Ensure api_response is checked before accessing .get
+                if not is_error_flag and api_response.get("success"):
+                    tool_output_data = api_response.get("data")
+                elif not is_error_flag: # Implies api_response exists but success is false
+                    is_error_flag = True
+                    error_message = api_response.get("error_message", "Unknown error from damien_get_email_details tool.")
+                # If is_error_flag was already true from validation, error_message is already set
 
         elif tool_name == "damien_trash_emails":
             try:
@@ -170,13 +181,12 @@ async def execute_tool_endpoint(
                         remove_label_names=label_params.remove_label_names
                     )
                     # This block should be inside the else, only if api_response is set
-                    if api_response.get("success"):
+                    if not is_error_flag and api_response.get("success"): # Check is_error_flag
                         tool_output_data = api_response.get("data")
-                    else:
+                    elif not is_error_flag: # Implies api_response exists but success is false
                         is_error_flag = True
                         error_message = api_response.get("error_message", "Unknown error from damien_label_emails tool.")
-                # If the inner 'if' (line 121) was true, is_error_flag is already set,
-                # and api_response was not called, so we skip the above.
+                # If is_error_flag was already true from validation, error_message is already set
 
         elif tool_name == "damien_mark_emails":
             try:
@@ -193,16 +203,35 @@ async def execute_tool_endpoint(
         elif tool_name == "damien_apply_rules":
             try: apply_rules_params_model = ApplyRulesParams(**params_dict)
             except ValidationError as e: is_error_flag = True; error_message = f"Invalid parameters for damien_apply_rules: {e.errors()}"
-            if not is_error_flag: 
-                api_response = await adapter.apply_rules_tool(params=apply_rules_params_model)
+            if not is_error_flag:
+                # apply_rules_params_model is an instance of ApplyRulesParams
+                # which now has include_detailed_ids
+                api_response = await adapter.apply_rules_tool(params=apply_rules_params_model) # The adapter method now handles this.
                 if api_response.get("success"): tool_output_data = api_response.get("data")
                 else: is_error_flag = True; error_message = api_response.get("error_message", "Unknown error from damien_apply_rules tool.")
 
         elif tool_name == "damien_list_rules":
-            api_response = await adapter.list_rules_tool()
-            if api_response.get("success"): tool_output_data = api_response.get("data")
-            else: is_error_flag = True; error_message = api_response.get("error_message", "Unknown error from damien_list_rules tool.")
+            try:
+                list_rules_params = ListRulesParams(**params_dict)
+            except ValidationError as e:
+                is_error_flag = True; error_message = f"Invalid parameters for {tool_name}: {e.errors()}"
+            if not is_error_flag:
+                api_response = await adapter.list_rules_tool(summary_view=list_rules_params.summary_view)
+                if api_response.get("success"): tool_output_data = api_response.get("data")
+                else: is_error_flag = True; error_message = api_response.get("error_message", "Unknown error from damien_list_rules tool.")
 
+        elif tool_name == "damien_get_rule_details":
+            try:
+                get_rule_params = GetRuleDetailsParams(**params_dict)
+            except ValidationError as e:
+                is_error_flag = True; error_message = f"Invalid parameters for {tool_name}: {e.errors()}"
+            if not is_error_flag:
+                api_response = await adapter.get_rule_details_tool(rule_id_or_name=get_rule_params.rule_id_or_name)
+                if api_response.get("success"): tool_output_data = api_response.get("data")
+                else:
+                    is_error_flag = True; error_message = api_response.get("error_message", f"Unknown error from {tool_name} tool.")
+                    if api_response.get("error_code") == "RULE_NOT_FOUND": error_message = f"Rule '{get_rule_params.rule_id_or_name}' not found."
+        
         elif tool_name == "damien_add_rule":
             try: add_rule_params_model = AddRuleParams(**params_dict)
             except ValidationError as e: is_error_flag = True; error_message = f"Invalid parameters for damien_add_rule: {e.errors()}"
@@ -369,9 +398,15 @@ async def list_tools_endpoint():
         },
         {
             "name": "damien_list_rules",
-            "description": "Lists all configured filtering rules in Damien, including their definitions (name, conditions, actions).",
-            "input_schema": {}, # No parameters needed for listing all rules
+            "description": "Lists filtering rules in Damien. Can return summaries or full definitions.",
+            "input_schema": ListRulesParams.model_json_schema(),
             "output_schema": ListRulesOutput.model_json_schema()
+        },
+        {
+            "name": "damien_get_rule_details",
+            "description": "Retrieves the full definition of a specific filtering rule by its ID or name.",
+            "input_schema": GetRuleDetailsParams.model_json_schema(),
+            "output_schema": RuleModelOutput.model_json_schema() # RuleModelOutput is the full definition
         },
         {
             "name": "damien_add_rule",

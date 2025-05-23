@@ -6,6 +6,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from googleapiclient.http import BatchHttpRequest # Added for batch requests
 from damien_cli.core import config as app_config  # For paths and SCOPES
 from .exceptions import (
     GmailApiError,
@@ -221,6 +222,142 @@ def get_g_service_client_from_token(
         raise DamienError(f"Unexpected error building Gmail service: {e}")
 
 
+# --- Batch Operations Helpers ---
+_BATCH_MAX_REQUESTS = 100  # Gmail API limit for batch requests is 100
+
+def _extract_header_value(api_headers_list: List[Dict[str, str]], header_name: str) -> Optional[str]:
+    """Extracts a specific header value from a list of Gmail API headers."""
+    for header in api_headers_list:
+        if header.get("name", "").lower() == header_name.lower():
+            return header.get("value")
+    return None
+
+def _batch_get_messages_metadata(
+    service: Any,
+    message_ids: List[str],
+    headers_to_include: List[str],
+) -> List[Dict[str, Any]]:
+    """
+    Fetches metadata (id, threadId, and specified headers) for a list of message IDs
+    using batch requests.
+    """
+    if not message_ids:
+        return []
+    if not headers_to_include:
+        logger.warning("_batch_get_messages_metadata called with no headers_to_include. Returning minimal info.")
+        # This case should ideally be prevented by the caller, but if it happens,
+        # return id and threadId (though threadId isn't available without a get)
+        # For simplicity here, we'll return what we can, assuming caller handles it.
+        # A more robust approach might be to fetch minimal details or raise an error.
+        # However, list_messages will call this only if headers_to_include is non-empty.
+        return [{"id": msg_id, "threadId": None, "error": "No headers requested for batch fetch."} for msg_id in message_ids]
+
+    all_processed_messages: List[Dict[str, Any]] = []
+    
+    # Process message_ids in chunks to respect API batch limits
+    for i in range(0, len(message_ids), _BATCH_MAX_REQUESTS):
+        current_batch_ids = message_ids[i:i + _BATCH_MAX_REQUESTS]
+        batch_processed_messages_map: Dict[str, Dict[str, Any]] = {} # Using dict for this batch's results
+
+        def _callback(request_id: str, response: Optional[Dict[str, Any]], exception: Optional[HttpError]):
+            nonlocal batch_processed_messages_map # Modify map for the current batch
+            message_id_for_request = request_id
+
+            if exception:
+                logger.error(
+                    f"Error in batch request for message ID {message_id_for_request}: {exception}",
+                    exc_info=False, # Keep log concise for batch errors
+                )
+                batch_processed_messages_map[message_id_for_request] = {
+                    "id": message_id_for_request,
+                    "threadId": None,
+                    "error": f"API error: {str(exception)}",
+                    **{header_name: None for header_name in headers_to_include}
+                }
+                return
+
+            if response:
+                msg_data: Dict[str, Any] = {
+                    "id": response.get("id"),
+                    "threadId": response.get("threadId"),
+                }
+                
+                # --- BEGIN DEBUG LOGGING ---
+                payload = response.get("payload")
+                if payload:
+                    api_headers = payload.get("headers", [])
+                    logger.debug(f"Message ID {message_id_for_request}: Payload found. Headers count: {len(api_headers)}")
+                    if not api_headers:
+                        logger.debug(f"Message ID {message_id_for_request}: Headers list is empty. Payload keys: {payload.keys()}")
+                    # Optionally log all headers for one message to see their structure:
+                    # if message_id_for_request == current_batch_ids[0] and api_headers: # Log only for first message in batch
+                    #    logger.debug(f"Message ID {message_id_for_request}: Raw headers: {api_headers}")
+                else:
+                    api_headers = []
+                    logger.debug(f"Message ID {message_id_for_request}: Payload is None or missing.")
+                # --- END DEBUG LOGGING ---
+                
+                for header_name in headers_to_include:
+                    msg_data[header_name] = _extract_header_value(api_headers, header_name)
+                batch_processed_messages_map[message_id_for_request] = msg_data
+            else:
+                logger.warning(f"No response and no exception for message ID {message_id_for_request} in batch.")
+                batch_processed_messages_map[message_id_for_request] = {
+                    "id": message_id_for_request,
+                    "threadId": None,
+                    "error": "Unknown error: No response and no exception in batch item.",
+                    **{header_name: None for header_name in headers_to_include}
+                }
+
+        batch_request = service.new_batch_http_request(callback=_callback)
+        for msg_id in current_batch_ids:
+            batch_request.add(
+                service.users().messages().get(
+                    userId="me", id=msg_id, format="full", metadataHeaders=",".join(headers_to_include) # Use "full" to reliably get headers
+                ),
+                request_id=msg_id
+            )
+        
+        try:
+            batch_request.execute()
+        except HttpError as e:
+            logger.error(f"Critical HTTP error during batch execution for IDs {current_batch_ids}: {e}", exc_info=True)
+            # Mark all messages in this specific batch as errored if the whole batch itself fails
+            for msg_id in current_batch_ids:
+                if msg_id not in batch_processed_messages_map: # Avoid overwriting if callback somehow ran
+                    batch_processed_messages_map[msg_id] = {
+                        "id": msg_id,
+                        "threadId": None,
+                        "error": f"Batch execution failed: {str(e)}",
+                        **{header_name: None for header_name in headers_to_include}
+                    }
+        except Exception as e: # Catch other unexpected errors during batch.execute()
+            logger.error(f"Unexpected critical error during batch execution for IDs {current_batch_ids}: {e}", exc_info=True)
+            for msg_id in current_batch_ids:
+                if msg_id not in batch_processed_messages_map:
+                    batch_processed_messages_map[msg_id] = {
+                        "id": msg_id,
+                        "threadId": None,
+                        "error": f"Unexpected batch execution error: {str(e)}",
+                        **{header_name: None for header_name in headers_to_include}
+                    }
+        
+        # Append results from this batch to the main list, maintaining original order of current_batch_ids
+        for msg_id in current_batch_ids:
+            if msg_id in batch_processed_messages_map:
+                all_processed_messages.append(batch_processed_messages_map[msg_id])
+            else:
+                # This implies an ID was in current_batch_ids but not processed by callback or batch error handling
+                logger.warning(f"Message ID {msg_id} was not found in current batch processing results. Adding placeholder.")
+                all_processed_messages.append({
+                    "id": msg_id,
+                    "threadId": None,
+                    "error": "Message not processed in batch (missing from callback results).",
+                    **{header_name: None for header_name in headers_to_include}
+                })
+                
+    return all_processed_messages
+
 # --- Label Operations ---
 _label_name_to_id_cache: Dict[str, str] = {}
 _system_labels = [
@@ -345,8 +482,13 @@ def list_messages(
     query_string: Optional[str] = None,
     max_results: int = 100,
     page_token: Optional[str] = None,
+    include_headers: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """Lists messages matching the query. Returns dict with 'messages' and 'nextPageToken'."""
+    """
+    Lists messages matching the query.
+    If include_headers is provided, fetches specified headers for each message.
+    Returns dict with 'messages' and 'nextPageToken'.
+    """
     if not service:
         raise InvalidParameterError("Gmail service not available for list_messages.")
 
@@ -357,12 +499,26 @@ def list_messages(
         if page_token:
             list_params["pageToken"] = page_token
 
-        logger.debug(f"API: Listing messages with params: {list_params}")
-        results = service.users().messages().list(**list_params).execute()
-        return {
-            "messages": results.get("messages", []),
-            "nextPageToken": results.get("nextPageToken"),
-        }
+        logger.debug(f"API: Listing messages with params: {list_params}, include_headers: {include_headers}")
+        id_list_response = service.users().messages().list(**list_params).execute()
+        
+        message_stubs = id_list_response.get("messages", [])
+        next_page_token_val = id_list_response.get("nextPageToken")
+
+        if include_headers and message_stubs:
+            message_ids_to_fetch = [stub["id"] for stub in message_stubs if stub.get("id")]
+            if message_ids_to_fetch:
+                logger.debug(f"Fetching details for {len(message_ids_to_fetch)} messages with headers: {include_headers}")
+                detailed_messages = _batch_get_messages_metadata(
+                    service, message_ids_to_fetch, include_headers
+                )
+                return {"messages": detailed_messages, "nextPageToken": next_page_token_val}
+            else: # No valid IDs in stubs, return empty with token
+                return {"messages": [], "nextPageToken": next_page_token_val}
+        else:
+            # Return basic stubs if no headers requested or no messages found
+            return {"messages": message_stubs, "nextPageToken": next_page_token_val}
+
     except HttpError as error:
         logger.error(
             f"API error listing messages: {error.resp.status} - {error.content}",
@@ -377,34 +533,43 @@ def list_messages(
 
 
 def get_message_details(
-    service: Any, message_id: str, email_format: str = "metadata"
+    service: Any,
+    message_id: str,
+    email_format: str = "metadata",
+    include_headers: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """Gets a specific message by its ID."""
+    """
+    Gets a specific message by its ID.
+    If include_headers is provided, fetches only specified headers with format 'METADATA'.
+    """
     if not service:
-        raise InvalidParameterError(
-            "Gmail service not available for get_message_details."
-        )
+        raise InvalidParameterError("Gmail service not available for get_message_details.")
     if not message_id:
         raise InvalidParameterError("Message ID cannot be empty.")
 
-    valid_formats = ["full", "metadata", "raw"]
-    actual_format = email_format.lower()
-    if actual_format not in valid_formats:
-        logger.warning(
-            f"Invalid email_format '{email_format}' for get_message_details. Defaulting to 'metadata'."
-        )
-        actual_format = "metadata"
+    get_params: Dict[str, Any] = {"userId": "me", "id": message_id}
 
-    try:
+    if include_headers:
+        get_params["format"] = "full" # Use "full" to reliably get headers when specific ones are requested
+        get_params["metadataHeaders"] = ",".join(include_headers) # metadataHeaders is still useful with "full" to signal intent
+        logger.debug(
+            f"API: Getting message (ID: {message_id}) with specific headers: {include_headers}"
+        )
+    else:
+        valid_formats = ["full", "metadata", "raw"]
+        actual_format = email_format.lower()
+        if actual_format not in valid_formats:
+            logger.warning(
+                f"Invalid email_format '{email_format}' for get_message_details. Defaulting to 'metadata'."
+            )
+            actual_format = "metadata"
+        get_params["format"] = actual_format
         logger.debug(
             f"API: Getting message details for ID: {message_id}, Format: {actual_format}"
         )
-        message = (
-            service.users()
-            .messages()
-            .get(userId="me", id=message_id, format=actual_format)
-            .execute()
-        )
+
+    try:
+        message = service.users().messages().get(**get_params).execute()
         return message
     except HttpError as error:
         logger.error(

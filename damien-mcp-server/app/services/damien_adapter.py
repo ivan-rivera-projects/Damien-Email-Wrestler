@@ -15,6 +15,8 @@ functionality provided by Damien's core_api.
 
 from typing import Any, Dict, List, Optional
 import logging
+import logging as py_logging # To get logging.DEBUG
+from damien_cli.core import logging_setup as damien_cli_logging_setup # For CLI logging setup
 
 # Import Damien core_api components
 from damien_cli.core_api import gmail_api_service as damien_gmail_module
@@ -57,6 +59,21 @@ class DamienAdapter:
     """
     
     def __init__(self):
+        # Explicitly setup damien-cli logging if not already done or to ensure level
+        # This helps ensure that when damien-cli is used as a library by the MCP server,
+        # its logging (especially file logging and debug level) is active.
+        try:
+            damien_cli_logger = damien_cli_logging_setup.setup_logging(log_level=py_logging.DEBUG)
+            # Check if file handler is present and path is as expected
+            cli_file_handler_path = None
+            for handler in damien_cli_logger.handlers:
+                if isinstance(handler, py_logging.FileHandler):
+                    cli_file_handler_path = handler.baseFilename
+                    break
+            logger.info(f"DamienAdapter: Damien CLI logging configured by adapter. Level: DEBUG. Expected CLI log file: {cli_file_handler_path or 'Not Set'}")
+        except Exception as e:
+            logger.error(f"DamienAdapter: Failed to explicitly configure Damien CLI logging: {e}", exc_info=True)
+
         self._g_service_client: Optional[Any] = None # Cached client
         self.damien_gmail_module = damien_gmail_module
         self.damien_rules_module = damien_rules_module
@@ -101,43 +118,51 @@ class DamienAdapter:
         return self._g_service_client
 
     async def list_emails_tool(
-        self, query: Optional[str] = None, max_results: int = 10, page_token: Optional[str] = None
+        self,
+        query: Optional[str] = None,
+        max_results: int = 10,
+        page_token: Optional[str] = None,
+        include_headers: Optional[List[str]] = None  # New parameter
     ) -> Dict[str, Any]:
         """Lists emails from Gmail based on search criteria.
         
-        This method leverages Damien's core_api to search for emails in the user's
-        Gmail account based on a query string. It supports pagination and limiting
-        the number of results.
+        Can include specified headers in the response to optimize data fetching.
         
         Args:
-            query: Optional Gmail search query string (e.g., "is:unread", "from:example.com")
-            max_results: Maximum number of emails to retrieve (default: 10)
-            page_token: Optional token for pagination from a previous request
+            query: Optional Gmail search query string.
+            max_results: Maximum number of emails to retrieve.
+            page_token: Optional token for pagination.
+            include_headers: Optional list of header names to include in summaries.
             
         Returns:
-            Dict[str, Any]: A dictionary with the following structure:
-                {
-                    "success": bool,  # Whether the operation succeeded
-                    "data": {         # Present if success is True
-                        "email_summaries": List[Dict],  # List of email summary objects
-                        "next_page_token": Optional[str]  # Token for pagination
-                    },
-                    "error_message": Optional[str],  # Present if success is False
-                    "error_code": Optional[str]      # Present if success is False
-                }
-                
-        Note:
-            This method includes comprehensive error handling to ensure it always
-            returns a well-formed response, even in case of exceptions from the
-            underlying Gmail API.
+            Dict[str, Any]: A dictionary containing operation status, data or error.
         """
         try:
             g_client = await self._ensure_g_service_client()
-            result_data = self.damien_gmail_module.list_messages(
-                g_client, query_string=query, max_results=max_results, page_token=page_token
+            logger.debug(
+                f"Adapter: list_emails_tool called with query='{query}', max_results={max_results}, "
+                f"page_token='{page_token}', include_headers={include_headers}"
             )
-            email_summaries = [{"id": msg.get("id"), "thread_id": msg.get("threadId")} for msg in result_data.get("messages", [])]
-            return {"success": True, "data": {"email_summaries": email_summaries, "next_page_token": result_data.get("nextPageToken")}}
+            result_data = self.damien_gmail_module.list_messages(
+                service=g_client, # Corrected parameter name
+                query_string=query,
+                max_results=max_results,
+                page_token=page_token,
+                include_headers=include_headers # Pass new parameter
+            )
+            # The damien_cli.list_messages will now return richer objects if include_headers was used.
+            # If include_headers was None, it returns basic stubs (id, threadId).
+            # If include_headers was provided, it returns a list of dicts, each potentially having
+            # 'id', 'threadId', requested headers, or an 'error' field per message.
+            email_summaries = result_data.get("messages", [])
+            
+            return {
+                "success": True,
+                "data": {
+                    "email_summaries": email_summaries,
+                    "next_page_token": result_data.get("nextPageToken")
+                }
+            }
         except (DamienError, GmailApiError, InvalidParameterError) as e:
             logger.error(f"Error in list_emails_tool: {e}", exc_info=True)
             return {"success": False, "error_message": str(e), "error_code": e.__class__.__name__}
@@ -145,12 +170,27 @@ class DamienAdapter:
             logger.error(f"Unexpected error in list_emails_tool: {e}", exc_info=True)
             return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR"}
     
-    async def get_email_details_tool(self, message_id: str, format_option: str = "full") -> Dict[str, Any]:
+    async def get_email_details_tool(
+        self,
+        message_id: str,
+        format_option: str = "metadata", # Defaulting to metadata as 'full' is heavy
+        include_headers: Optional[List[str]] = None # New parameter
+    ) -> Dict[str, Any]:
+        """
+        Retrieves details for a specific email message.
+        Can include only specified headers if format_option is 'metadata' and include_headers is provided.
+        """
         try:
             g_client = await self._ensure_g_service_client()
-            logger.debug(f"Adapter: Getting email details for ID: {message_id}, Format: {format_option}")
+            logger.debug(
+                f"Adapter: get_email_details_tool called for ID: {message_id}, "
+                f"format_option: {format_option}, include_headers: {include_headers}"
+            )
             email_data = self.damien_gmail_module.get_message_details(
-                g_client, message_id=message_id, email_format=format_option
+                service=g_client, # Corrected parameter name
+                message_id=message_id,
+                email_format=format_option,
+                include_headers=include_headers # Pass new parameter
             )
             return {"success": True, "data": email_data}
         except (DamienError, GmailApiError, InvalidParameterError) as e:
@@ -243,11 +283,18 @@ class DamienAdapter:
             final_query = " ".join(query_parts).strip()
             if params.all_mail: final_query = ""
             g_client = await self._ensure_g_service_client()
-            logger.info(f"Adapter: Applying rules with effective query: '{final_query}', Dry run: {params.dry_run}")
+            logger.info(
+                f"Adapter: Applying rules with effective query: '{final_query}', Dry run: {params.dry_run}, "
+                f"Detailed IDs: {params.include_detailed_ids}"
+            )
             summary_dict = self.damien_rules_module.apply_rules_to_mailbox(
-                g_service_client=g_client, gmail_api_service=self.damien_gmail_module,
-                gmail_query_filter=final_query if final_query else None, rule_ids_to_apply=params.rule_ids_to_apply,
-                dry_run=params.dry_run, scan_limit=params.scan_limit
+                g_service_client=g_client,
+                gmail_api_service=self.damien_gmail_module,
+                gmail_query_filter=final_query if final_query else None,
+                rule_ids_to_apply=params.rule_ids_to_apply,
+                dry_run=params.dry_run,
+                scan_limit=params.scan_limit,
+                include_detailed_ids=params.include_detailed_ids # Pass new parameter
             )
             return {"success": True, "data": summary_dict}
         except (DamienError, GmailApiError, InvalidParameterError, RuleStorageError) as e:
@@ -257,17 +304,58 @@ class DamienAdapter:
             logger.error(f"Unexpected error in apply_rules_tool: {e}", exc_info=True)
             return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR"}
 
-    async def list_rules_tool(self) -> Dict[str, Any]:
+    async def list_rules_tool(self, summary_view: bool = True) -> Dict[str, Any]:
         try:
-            logger.debug("Adapter: Listing all rules.")
+            logger.debug(f"Adapter: Listing rules. Summary view: {summary_view}")
             rule_models = self.damien_rules_module.load_rules()
-            rules_data = [rule.model_dump(mode="json") for rule in rule_models]
-            return {"success": True, "data": rules_data}
+            
+            output_data: List[Dict[str, Any]] = []
+            if summary_view:
+                for rule in rule_models:
+                    output_data.append({
+                        "id": rule.id,
+                        "name": rule.name,
+                        "description": rule.description,
+                        "is_enabled": rule.is_enabled
+                    })
+            else:
+                output_data = [rule.model_dump(mode="json") for rule in rule_models]
+                
+            return {"success": True, "data": {"rules": output_data, "summary_view_active": summary_view}}
         except RuleStorageError as e:
             logger.error(f"Error loading rules in list_rules_tool: {e}", exc_info=True)
             return {"success": False, "error_message": str(e), "error_code": "RULE_STORAGE_ERROR"}
         except Exception as e:
             logger.error(f"Unexpected error in list_rules_tool: {e}", exc_info=True)
+            return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR"}
+
+    async def get_rule_details_tool(self, rule_id_or_name: str) -> Dict[str, Any]:
+        try:
+            logger.debug(f"Adapter: Getting details for rule: {rule_id_or_name}")
+            # We need a function in damien_rules_module to get a single rule by ID or name
+            # For now, let's assume it exists or load all and filter.
+            # Ideally: rule_model = self.damien_rules_module.get_rule(rule_id_or_name)
+            
+            # Temporary workaround: load all and find
+            all_rules = self.damien_rules_module.load_rules()
+            found_rule: Optional[RuleModel] = None
+            for r in all_rules:
+                if r.id == rule_id_or_name or r.name.lower() == rule_id_or_name.lower():
+                    found_rule = r
+                    break
+            
+            if not found_rule:
+                raise RuleNotFoundError(f"Rule '{rule_id_or_name}' not found.")
+                
+            return {"success": True, "data": found_rule.model_dump(mode="json")}
+        except RuleNotFoundError as e:
+            logger.warning(f"Rule not found in get_rule_details_tool: {e}")
+            return {"success": False, "error_message": str(e), "error_code": "RULE_NOT_FOUND"}
+        except (RuleStorageError, InvalidParameterError) as e: # RuleStorageError if load_rules fails
+            logger.error(f"Error in get_rule_details_tool: {e}", exc_info=True)
+            return {"success": False, "error_message": str(e), "error_code": e.__class__.__name__}
+        except Exception as e:
+            logger.error(f"Unexpected error in get_rule_details_tool: {e}", exc_info=True)
             return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR"}
 
     async def add_rule_tool(self, rule_definition: Dict[str, Any]) -> Dict[str, Any]:

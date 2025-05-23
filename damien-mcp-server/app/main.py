@@ -4,12 +4,18 @@ This module initializes the FastAPI application and sets up routes and middlewar
 It serves as the entry point for the server.
 """
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException, status # Added HTTPException, status
 import logging
 
-# Set up logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+# Import core components
+from .core.config import settings # For log level
+from .core.logging_setup import setup_logging # New logging setup
+
+# Initialize logging for the application
+# This should be called once when the application starts.
+# The logger instance can then be retrieved by name in other modules.
+setup_logging(log_level_str=settings.log_level)
+logger = logging.getLogger("damien_mcp_server_app") # Use the configured app logger
 
 # Import our security dependency for API key verification
 from .core.security import verify_api_key

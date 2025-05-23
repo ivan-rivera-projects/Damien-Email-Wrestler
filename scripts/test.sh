@@ -6,6 +6,45 @@ set -e
 echo "🧪 Damien Email Wrestler Test Suite"
 echo "==================================="
 
+# Load environment variables
+if [ -f ".env" ]; then
+    export $(grep -v '^#' .env | xargs)
+fi
+
+# Check if API key is set
+if [ -z "$DAMIEN_MCP_SERVER_API_KEY" ]; then
+    echo "❌ DAMIEN_MCP_SERVER_API_KEY not found in .env file"
+    echo "Please ensure your .env file contains the API key"
+    exit 1
+fi
+
+# Check if services are running first
+SERVICE_CHECK_FAILED=false
+echo "Checking if required services are running..."
+if ! curl -s http://localhost:8892/health | grep -q "ok" 2>/dev/null; then
+    echo "❌ Damien MCP Server is not running on port 8892"
+    SERVICE_CHECK_FAILED=true
+fi
+
+if ! curl -s http://localhost:8081/health | grep -q "ok" 2>/dev/null; then
+    echo "❌ Smithery Adapter is not running on port 8081"
+    SERVICE_CHECK_FAILED=true
+fi
+
+if [ "$SERVICE_CHECK_FAILED" = true ]; then
+    echo ""
+    echo "⚠️  Required services are not running!"
+    echo "Please start all services first by running:"
+    echo ""
+    echo "    ./scripts/start-all.sh"
+    echo ""
+    echo "Or start them manually:"
+    echo "    cd damien-mcp-server && poetry run uvicorn app.main:app --port 8892 &"
+    echo "    cd damien-smithery-adapter && npm run serve &"
+    echo ""
+    exit 1
+fi
+
 TESTS_PASSED=0
 TESTS_FAILED=0
 
@@ -54,7 +93,7 @@ echo ""
 echo "Testing tool discovery..."
 
 # Test Damien MCP Server tool listing (with authentication)
-if curl -s -H "X-API-Key: 7a508adf3ccf8b9376c312df8cebd488f3988f310afbdf5077d5d3ce63ed7c8f" http://localhost:8892/mcp/list_tools | grep -q "damien_list_emails"; then
+if curl -s -H "X-API-Key: $DAMIEN_MCP_SERVER_API_KEY" http://localhost:8892/mcp/list_tools | grep -q "damien_list_emails"; then
     test_passed "Damien MCP Server tool discovery works"
 else
     test_failed "Damien MCP Server tool discovery failed"

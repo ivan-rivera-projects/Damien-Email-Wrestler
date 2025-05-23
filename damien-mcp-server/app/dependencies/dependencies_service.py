@@ -21,7 +21,7 @@ from ..core.config import settings # Changed to ..core
 from ..services.damien_adapter import DamienAdapter # Changed to ..services
 
 # Set up logger
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("damien_mcp_server_app") # Use the configured app logger
 
 # The get_g_service_client logic has been moved into DamienAdapter._ensure_g_service_client()
 # So, the standalone get_g_service_client dependency is removed from this file.

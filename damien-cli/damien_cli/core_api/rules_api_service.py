@@ -263,45 +263,91 @@ def translate_rule_to_gmail_query(rule: RuleModel) -> Optional[str]:
     translatable_conditions = []
     for condition in rule.conditions:
         query_part = None
+        value = condition.value # For convenience
         
         # Handle field-specific translations
         if condition.field == "from":
             if condition.operator == "contains":
-                query_part = f"from:{condition.value}"
+                query_part = f"from:{value}"
             elif condition.operator == "equals":
-                query_part = f"from:({condition.value})"  # Exact match needs parentheses
+                query_part = f"from:({value})"
             elif condition.operator == "not_contains" or condition.operator == "not_equals":
-                query_part = f"-from:{condition.value}"
+                query_part = f"-from:{value}"
                 
         elif condition.field == "to":
             if condition.operator == "contains":
-                query_part = f"to:{condition.value}"
+                query_part = f"to:{value}"
             elif condition.operator == "equals":
-                query_part = f"to:({condition.value})"
+                query_part = f"to:({value})"
             elif condition.operator == "not_contains" or condition.operator == "not_equals":
-                query_part = f"-to:{condition.value}"
+                query_part = f"-to:{value}"
                 
         elif condition.field == "subject":
             if condition.operator == "contains":
-                # Use parentheses for multi-word subjects
-                if " " in condition.value:
-                    query_part = f'subject:("{condition.value}")'
-                else:
-                    query_part = f"subject:{condition.value}"
+                if " " in value: query_part = f'subject:("{value}")'
+                else: query_part = f"subject:{value}"
             elif condition.operator == "equals":
-                query_part = f'subject:("{condition.value}")'
+                query_part = f'subject:("{value}")'
             elif condition.operator == "not_contains" or condition.operator == "not_equals":
-                if " " in condition.value:
-                    query_part = f'-subject:("{condition.value}")'
-                else:
-                    query_part = f"-subject:{condition.value}"
+                if " " in value: query_part = f'-subject:("{value}")'
+                else: query_part = f"-subject:{value}"
         
         elif condition.field == "label":
             if condition.operator == "contains":
-                query_part = f"label:{condition.value}"
+                query_part = f"label:{value}"
             elif condition.operator == "not_contains":
-                query_part = f"-label:{condition.value}"
+                query_part = f"-label:{value}"
+
+        elif condition.field == "date_age":
+            # Expects value like "7d", "2m", "1y"
+            # Basic validation: ensure value ends with d, m, or y and starts with a digit.
+            if value and len(value) > 1 and value[:-1].isdigit() and value[-1] in ['d', 'm', 'y']:
+                if condition.operator == "older_than":
+                    query_part = f"older_than:{value}"
+                elif condition.operator == "newer_than":
+                    query_part = f"newer_than:{value}"
+            else:
+                logger.warning(f"Invalid value '{value}' for date_age condition. Expected format like '7d', '2m'. Skipping translation.")
+
+        elif condition.field == "has_attachment":
+            if condition.operator == "is":
+                if value.lower() == "true":
+                    query_part = "has:attachment"
+                elif value.lower() == "false":
+                    query_part = "-has:attachment" # Gmail uses minus for negation
+            else:
+                 logger.warning(f"Unsupported operator '{condition.operator}' for 'has_attachment'. Use 'is'. Skipping translation.")
         
+        elif condition.field == "attachment_filename":
+            # Gmail uses 'filename:' for this
+            if condition.operator == "contains" or condition.operator == "equals":
+                 # For multi-word filenames, Gmail often implies AND, quotes might be needed for exact phrase
+                if " " in value: query_part = f'filename:("{value}")'
+                else: query_part = f"filename:{value}"
+            elif condition.operator == "not_contains" or condition.operator == "not_equals":
+                if " " in value: query_part = f'-filename:("{value}")'
+                else: query_part = f"-filename:{value}"
+            # 'starts_with' and 'ends_with' are not directly supported by Gmail's filename search.
+            # Could potentially use broader 'contains' or rely on client-side for these.
+
+        elif condition.field == "message_size":
+            # Expects value like "1M", "500K", "10000" (bytes)
+            # Basic validation: ensure value ends with K, M, or is all digits.
+            is_valid_size = False
+            if value:
+                if value.isdigit():
+                    is_valid_size = True
+                elif len(value) > 1 and value[:-1].isdigit() and value[-1].upper() in ['K', 'M']:
+                    is_valid_size = True
+            
+            if is_valid_size:
+                if condition.operator == "greater_than":
+                    query_part = f"larger:{value}"
+                elif condition.operator == "less_than":
+                    query_part = f"smaller:{value}"
+            else:
+                logger.warning(f"Invalid value '{value}' for message_size condition. Expected format like '10M', '500K', or bytes. Skipping translation.")
+
         # Add the query part if translatable
         if query_part:
             translatable_conditions.append(query_part)
@@ -339,19 +385,49 @@ def needs_full_message_details(rule: RuleModel) -> bool:
     
     for condition in rule.conditions:
         # If the field isn't one we can translate perfectly, we need details
-        if condition.field not in ["from", "to", "subject", "label"]:
+        translatable_fields = ["from", "to", "subject", "label", "date_age", "has_attachment", "attachment_filename", "message_size"]
+        if condition.field not in translatable_fields:
+            logger.debug(f"Rule needs details because field '{condition.field}' is not directly translatable to Gmail query.")
             return True
             
-        # If the field is one we can translate, but the operator isn't, we need details
-        if condition.field in ["from", "to", "subject"]:
+        # If the field is one we can translate, but the operator isn't perfectly matched, we might need details.
+        # This logic checks if the specific field-operator combo was translated.
+        # A more robust way is to check if translate_rule_to_gmail_query for this single condition would yield a result.
+        # For now, let's refine based on known supported translations.
+        
+        if condition.field in ["from", "to", "subject", "attachment_filename"]:
             if condition.operator not in ["contains", "not_contains", "equals", "not_equals"]:
+                logger.debug(f"Rule needs details due to operator '{condition.operator}' on field '{condition.field}'.")
                 return True
         elif condition.field == "label":
             if condition.operator not in ["contains", "not_contains"]:
+                logger.debug(f"Rule needs details due to operator '{condition.operator}' on field 'label'.")
                 return True
+        elif condition.field == "date_age":
+            if condition.operator not in ["older_than", "newer_than"]:
+                logger.debug(f"Rule needs details due to operator '{condition.operator}' on field 'date_age'.")
+                return True
+        elif condition.field == "has_attachment":
+            if condition.operator not in ["is"]:
+                logger.debug(f"Rule needs details due to operator '{condition.operator}' on field 'has_attachment'.")
+                return True
+        elif condition.field == "message_size":
+            if condition.operator not in ["greater_than", "less_than"]:
+                logger.debug(f"Rule needs details due to operator '{condition.operator}' on field 'message_size'.")
+                return True
+        
+        # If a condition like 'body_snippet' is used, it always needs details.
+        if condition.field == "body_snippet": # body_snippet was already in ConditionModel
+             logger.debug(f"Rule needs details because field 'body_snippet' is used.")
+             return True
                 
-    # If we have multiple conditions with OR conjunction, we need details for client-side validation
-    # (Gmail queries can handle AND implicitly but OR requires special handling)
+    # If we have multiple conditions with OR conjunction, and any of them are not perfectly translatable
+    # individually, or if the OR itself isn't perfectly handled by a combined query, we might need details.
+    # Gmail's OR is explicit. If translate_rule_to_gmail_query produces a valid OR query, it's server-side.
+    # The current translate_rule_to_gmail_query handles OR by joining parts with " OR ".
+    # So, if all individual parts are translatable, the OR query is server-side.
+    # The main reason for needing details with OR would be if one of the sub-conditions isn't translatable.
+    # The loop above should catch non-translatable sub-conditions.
     if len(rule.conditions) > 1 and rule.condition_conjunction == "OR":
         return True
         
@@ -446,32 +522,43 @@ def apply_rules_to_mailbox(
     gmail_query_filter: Optional[str] = None,
     rule_ids_to_apply: Optional[List[str]] = None,
     scan_limit: Optional[int] = None,
-    dry_run: bool = False
+    dry_run: bool = False,
+    include_detailed_ids: bool = False # New parameter
 ) -> Dict[str, Any]:
     """
     Applies configured rules to emails in the mailbox.
     Fetches emails, matches against rules, and executes actions (or simulates for dry_run).
     
     Args:
-        g_service_client: The authenticated Gmail API service client
-        gmail_api_service: The gmail_api_service module with helper functions
-        gmail_query_filter: Optional Gmail query string to filter emails
-        rule_ids_to_apply: Optional list of rule IDs to apply (if None, applies all enabled rules)
-        scan_limit: Optional maximum number of emails to scan
-        dry_run: If True, actions are only simulated, not executed
+        g_service_client: The authenticated Gmail API service client.
+        gmail_api_service: The gmail_api_service module with helper functions.
+        gmail_query_filter: Optional Gmail query string to filter emails.
+        rule_ids_to_apply: Optional list of rule IDs to apply.
+        scan_limit: Optional maximum number of emails to scan.
+        dry_run: If True, actions are only simulated.
+        include_detailed_ids: If True, the 'actions_planned_or_taken' in the summary
+                              will include lists of affected email IDs. Otherwise, it will
+                              contain counts. Defaults to False for concise summaries.
         
     Returns:
-        A summary dictionary with results and statistics
+        A summary dictionary with results and statistics.
     """
-    logger.info(f"Starting rule application. Dry run: {dry_run}. Query: '{gmail_query_filter}'. Specific rules: {rule_ids_to_apply}")
+    logger.info(
+        f"Starting rule application. Dry run: {dry_run}. Query: '{gmail_query_filter}'. "
+        f"Specific rules: {rule_ids_to_apply}. Detailed IDs: {include_detailed_ids}"
+    )
     
     # --- Initialization of trackers ---
+    # _internal_actions_on_ids will always store lists of IDs for potential execution.
+    _internal_actions_on_ids: Dict[str, List[str]] = defaultdict(list)
+    
     summary: Dict[str, Any] = {
         "total_emails_scanned": 0,
         "emails_matching_any_rule": 0,
-        "actions_planned_or_taken": defaultdict(list), # Using defaultdict
+        # "actions_planned_or_taken" will be populated at the end based on include_detailed_ids
         "rules_applied_counts": defaultdict(int),
         "dry_run": dry_run,
+        "include_detailed_ids_in_summary": include_detailed_ids, # For clarity in output
         "errors": [] # List of error dicts
     }
     
@@ -604,8 +691,7 @@ def apply_rules_to_mailbox(
                                 continue
                             action_key = f"{action_model.type}:{action_model.label_name}"
                         
-                        # Add email ID to the list for this action
-                        summary["actions_planned_or_taken"][action_key].append(email_id)
+                        _internal_actions_on_ids[action_key].append(email_id) # Always store IDs internally
                         logger.debug(f"Planned action '{action_key}' for email ID {email_id} due to rule '{rule.name}'.")
                     
                     continue  # Skip to next email
@@ -659,8 +745,7 @@ def apply_rules_to_mailbox(
                                     continue
                                 action_key = f"{action_model.type}:{action_model.label_name}"
                             
-                            # Add email ID to the list for this action
-                            summary["actions_planned_or_taken"][action_key].append(email_id)
+                            _internal_actions_on_ids[action_key].append(email_id) # Always store IDs internally
                             logger.debug(f"Planned action '{action_key}' for email ID {email_id} due to rule '{rule.name}'.")
                 except GmailApiError as e:
                     logger.error(f"Gmail API error fetching details for email ID {email_id}: {e}", exc_info=True)
@@ -694,12 +779,12 @@ def apply_rules_to_mailbox(
     # --- 3. Execute Aggregated Actions ---
     if not dry_run:
         logger.info("Executing aggregated actions...")
-        executed_actions_summary: Dict[str, int] = defaultdict(int)
+        executed_actions_counts: Dict[str, int] = defaultdict(int) # Stores counts of successfully executed actions
         
-        for action_key, email_ids_for_action in summary["actions_planned_or_taken"].items():
+        for action_key, email_ids_for_action in _internal_actions_on_ids.items():
             if not email_ids_for_action: continue
             
-            unique_email_ids = sorted(list(set(email_ids_for_action))) # Deduplicate and sort for consistency
+            unique_email_ids = sorted(list(set(email_ids_for_action)))
             logger.info(f"Executing action '{action_key}' for {len(unique_email_ids)} email(s).")
             
             try:
@@ -724,7 +809,7 @@ def apply_rules_to_mailbox(
                     )
                 
                 if action_success:
-                    executed_actions_summary[action_key] = len(unique_email_ids)
+                    executed_actions_counts[action_key] = len(unique_email_ids)
                     logger.info(f"Successfully executed action '{action_key}' for {len(unique_email_ids)} email(s).")
                 else:
                     msg = f"Action '{action_key}' reported failure for {len(unique_email_ids)} email(s)."
@@ -738,14 +823,14 @@ def apply_rules_to_mailbox(
                 logger.error(f"Unexpected error executing action '{action_key}': {e}", exc_info=True)
                 summary["errors"].append({"error_type": "ACTION_EXECUTION_UNEXPECTED_ERROR", "action": action_key, "details": str(e)})
         
-        # Replace planned actions with actually executed summary for non-dry_run
-        summary["actions_planned_or_taken"] = executed_actions_summary
-    else:
+        summary["actions_planned_or_taken"] = executed_actions_counts # For non-dry_run, this shows counts of what was done.
+    
+    else: # This is the dry_run=True case
         logger.info("Dry run: No actions were executed.")
-        # For dry run, "actions_planned_or_taken" already holds the plan.
-        # Convert to counts for cleaner display
-        dry_run_planned_counts = {k: len(set(v)) for k, v in summary["actions_planned_or_taken"].items()}
-        summary["actions_planned_or_taken"] = dry_run_planned_counts
+        if include_detailed_ids:
+            summary["actions_planned_or_taken"] = {k: sorted(list(set(v))) for k, v in _internal_actions_on_ids.items()}
+        else:
+            summary["actions_planned_or_taken"] = {k: len(set(v)) for k, v in _internal_actions_on_ids.items()}
     
     logger.info(f"Rule application finished. Results: {summary}")
     return summary

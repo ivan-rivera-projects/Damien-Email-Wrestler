@@ -12,6 +12,8 @@ export const CONFIG = {
   
   SMITHERY_REGISTRY_URL: process.env.SMITHERY_REGISTRY_URL || 'https://registry.smithery.ai', // If different
   SMITHERY_BEARER_AUTH: process.env.SMITHERY_BEARER_AUTH || '', // Your token for Smithery Registry
+  LOG_LEVEL: process.env.LOG_LEVEL || 'info',
+  LOG_FILE_PATH: process.env.ADAPTER_LOG_FILE_PATH || '../../logs/smithery-adapter.log', // Default to project logs dir
 };
 
 if (!CONFIG.DAMIEN_MCP_SERVER_API_KEY) {

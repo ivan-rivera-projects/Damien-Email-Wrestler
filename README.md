@@ -53,10 +53,30 @@ Damien Email Wrestler consists of three integrated components:
 ```bash
 git clone https://github.com/ivan-rivera-projects/Damien-Email-Wrestler.git
 cd Damien-Email-Wrestler
-./scripts/start.sh
+./scripts/start-all.sh  # Start all services
+./scripts/test.sh       # Run tests
 ```
 
 **Need help?** Check the [detailed startup guide](scripts/README.md) or follow the options below.
+
+### ⚠️ Important: Service Dependencies
+
+Damien Email Wrestler requires **two services** to be running:
+1. **Damien MCP Server** (Port 8892) - Core email management functionality
+2. **Smithery Adapter** (Port 8081) - AI assistant integration layer
+
+**Always start both services before running tests or using Damien:**
+```bash
+# Start all services
+./scripts/start-all.sh
+
+# Or manually start each service:
+cd damien-mcp-server && poetry run uvicorn app.main:app --port 8892 &
+cd damien-smithery-adapter && npm run serve &
+
+# Stop all services when done
+./scripts/stop-all.sh
+```
 
 ### Option 1: One-Command Startup (Recommended)
 
@@ -256,6 +276,17 @@ When registered with Smithery, you can use natural language with AI assistants:
 - "Move all promotional emails to a separate folder"
 
 ## 🧪 Testing
+
+### Prerequisites for Testing
+⚠️ **Both services must be running before tests will pass:**
+```bash
+# Quick check if services are running
+curl -s http://localhost:8892/health  # Should return {"status":"ok",...}
+curl -s http://localhost:8081/health  # Should return {"status":"ok",...}
+
+# If not running, start them:
+./scripts/start-all.sh
+```
 
 ### Run All Tests
 ```bash

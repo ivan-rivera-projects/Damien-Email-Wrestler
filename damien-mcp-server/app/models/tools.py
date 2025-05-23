@@ -40,13 +40,18 @@ class ListEmailsParams(MCPToolCallInput):
         default=None,
         description="Optional. An opaque token received from a previous 'damien_list_emails' call to fetch the next page of results."
     )
+    include_headers: Optional[List[str]] = Field(
+        default=None,
+        description="Optional list of header names (e.g., 'From', 'Subject', 'Date', 'To', 'Cc', 'Reply-To', 'Message-ID') to include in each email summary. Requesting specific headers is more efficient than fetching full details later. If omitted, basic summaries (ID, threadId, and potentially a snippet if fetched by default by the CLI) are returned. Check the 'EmailSummary' model for fields that can be populated."
+    )
     
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "query": "is:unread from:newsletter@example.com subject:important",
-                "max_results": 100,
-                "page_token": " nextPageTokenFromPreviousCall"
+                "max_results": 50,
+                "page_token": "nextPageTokenFromPreviousCall",
+                "include_headers": ["From", "Subject", "Date"]
             }
         }
     )
@@ -56,13 +61,18 @@ class EmailSummary(BaseModel):
     id: str = Field(description="The unique immutable ID of the email message.")
     thread_id: Optional[str] = Field(default=None, description="The ID of the email thread this message belongs to.")
     subject: Optional[str] = Field(default=None, description="The subject line of the email.")
-    from_address: Optional[str] = Field(default=None, alias="from", description="The sender's email address and optional name (e.g., 'John Doe <john.doe@example.com>').")
-    snippet: Optional[str] = Field(default=None, description="A short snippet of the email's content.")
-    date: Optional[str] = Field(default=None, description="The date the email was received, typically in RFC 3339 format (e.g., '2023-10-26T10:30:00Z').")
-    has_attachments: Optional[bool] = Field(default=False, description="Indicates if the email has one or more attachments.")
-    label_ids: Optional[List[str]] = Field(default_factory=list, description="List of label IDs applied to this email (e.g., ['INBOX', 'UNREAD', 'IMPORTANT']).")
+    from_address: Optional[str] = Field(default=None, alias="From", description="The sender's email address and optional name (e.g., 'John Doe <john.doe@example.com>'). Populated if 'From' is in 'include_headers'.")
+    to_address: Optional[str] = Field(default=None, alias="To", description="The recipient's email address(es). Populated if 'To' is in 'include_headers'.")
+    cc_address: Optional[str] = Field(default=None, alias="Cc", description="The CC recipient's email address(es). Populated if 'Cc' is in 'include_headers'.")
+    date: Optional[str] = Field(default=None, alias="Date", description="The date the email was sent/received. Populated if 'Date' is in 'include_headers'.")
+    snippet: Optional[str] = Field(default=None, description="A short snippet of the email's content. Often available with minimal fetches.")
+    # has_attachments: Optional[bool] = Field(default=False, description="Indicates if the email has one or more attachments.") # This typically requires more than just headers.
+    label_ids: Optional[List[str]] = Field(default_factory=list, description="List of label IDs applied to this email. Usually available with minimal fetches.")
+    # Allow other headers to be passed through if requested and fetched by the CLI
+    additional_headers: Optional[Dict[str, Any]] = Field(default=None, description="Any other explicitly requested headers via 'include_headers' that don't map to a predefined field in this summary.")
 
-    model_config = ConfigDict(populate_by_name=True)
+
+    model_config = ConfigDict(populate_by_name=True) # Allows using 'From' as alias for 'from_address' etc.
 
 
 class ListEmailsOutput(BaseModel):
@@ -77,21 +87,23 @@ class ListEmailsOutput(BaseModel):
                     {
                         "id": "18b9e3f2a1b0c8d7",
                         "thread_id": "18b9e3f2a1b0c8d7",
-                        "subject": "Project Update Q4",
-                        "from_address": "manager@example.com", # Changed from 'from' to 'from_address' to match field name
+                        "id": "18b9e3f2a1b0c8d7",
+                        "thread_id": "18b9e3f2a1b0c8d7",
+                        "subject": "Project Update Q4", # Populated if "Subject" in include_headers
+                        "From": "Manager <manager@example.com>", # Populated if "From" in include_headers
+                        "To": "Team <team@example.com>", # Populated if "To" in include_headers
+                        "Date": "2023-11-15T14:22:01Z", # Populated if "Date" in include_headers
                         "snippet": "Here is the latest update on Project Phoenix...",
-                        "date": "2023-11-15T14:22:01Z",
-                        "has_attachments": True,
-                        "label_ids": ["INBOX", "IMPORTANT"]
+                        "label_ids": ["INBOX", "IMPORTANT"],
+                        "additional_headers": {"Reply-To": "manager@example.com"} # Example
                     },
                     {
                         "id": "18b9e3c5f0a9b7e6",
                         "thread_id": "18b9e3c5f0a9b7e6",
                         "subject": "Team Lunch Next Week",
-                        "from_address": "colleague@example.com", # Changed from 'from' to 'from_address'
+                        "From": "Colleague <colleague@example.com>",
                         "snippet": "Are you free for a team lunch next Tuesday?",
-                        "date": "2023-11-14T10:05:30Z",
-                        "has_attachments": False,
+                        "Date": "2023-11-14T10:05:30Z",
                         "label_ids": ["INBOX", "UNREAD"]
                     }
                 ],
@@ -106,14 +118,19 @@ class GetEmailDetailsParams(MCPToolCallInput):
     """Input model for the damien_get_email_details tool."""
     message_id: str = Field(..., description="The unique immutable ID of the email message to retrieve.")
     format: Optional[str] = Field(
-        default="full",
+        default="metadata", # Changed default to 'metadata'
         description="Specifies the level of detail for the email. 'full' returns complete data including payload. 'metadata' returns headers and snippet. 'raw' returns the full email as a raw, RFC 2822 formatted string (base64url encoded)."
+    )
+    include_headers: Optional[List[str]] = Field(
+        default=None,
+        description="Optional. If 'format' is 'metadata' (or if this field is provided, format will be treated as 'metadata'), this specifies a list of header names to retrieve (e.g., 'From', 'Subject', 'Date'). Fetches only these headers, overriding fetching all metadata headers. More efficient if only specific headers are needed. Common headers: 'From', 'To', 'Cc', 'Bcc', 'Subject', 'Date', 'Reply-To', 'Message-ID'."
     )
     model_config = ConfigDict(
         json_schema_extra = {
             "example": {
                 "message_id": "18b9e3f2a1b0c8d7",
-                "format": "full"
+                "format": "metadata",
+                "include_headers": ["From", "Subject", "Message-ID"]
             }
         }
     )
@@ -293,6 +310,10 @@ class ApplyRulesParams(MCPToolCallInput):
         default=False,
         description="Optional. If True, ignores all other query filters (including `gmail_query_filter` and date ranges) and attempts to apply rules to all mail in the account. Use with extreme caution due to potential for widespread changes."
     )
+    include_detailed_ids: Optional[bool] = Field(
+        default=False,
+        description="Optional. If True, the 'actions_planned_or_taken' in the summary will include lists of affected email IDs. Otherwise (default False), it will contain counts. Set to True if you need to know exactly which emails were affected by each action."
+    )
     model_config = ConfigDict(
         json_schema_extra = {
             "example": {
@@ -301,7 +322,8 @@ class ApplyRulesParams(MCPToolCallInput):
                 "dry_run": True,
                 "scan_limit": 500,
                 "date_after": "2023/01/01",
-                "date_before": "2023/12/31"
+                "date_before": "2023/12/31",
+                "include_detailed_ids": False
             }
         }
     )
@@ -319,28 +341,35 @@ class ApplyRulesOutput(BaseModel):
     total_rules_evaluated: int = Field(description="Total number of unique rules evaluated.")
     total_actions_taken: int = Field(description="Total number of actions (across all rules and messages) taken or that would be taken if not a dry run.")
     dry_run: bool = Field(description="Indicates if the operation was a dry run (simulation).")
-    results_by_rule: List[RuleApplicationResult] = Field(description="A list detailing the outcome of each rule that was applied or matched.")
+    include_detailed_ids_in_summary: bool = Field(description="Indicates if the 'actions_planned_or_taken' field contains detailed lists of email IDs (True) or just counts (False).")
+    actions_planned_or_taken: Dict[str, Any] = Field(description="A dictionary where keys are action types (e.g., 'trash', 'add_label:MyLabel') and values are either lists of affected email IDs (if include_detailed_ids_in_summary was True) or counts of affected emails (if False).")
+    results_by_rule: List[RuleApplicationResult] = Field(description="A list detailing the outcome of each rule that was applied or matched.") # This might be redundant if actions_planned_or_taken is comprehensive
     overall_status_message: str = Field(description="A summary message of the rule application process.")
     
     model_config = ConfigDict(
-        json_schema_extra = {
+        json_schema_extra={
             "example": {
                 "total_messages_scanned": 480,
                 "total_rules_evaluated": 2,
-                "total_actions_taken": 15,
+                "total_actions_taken": 15, # This might be sum of counts from actions_planned_or_taken
                 "dry_run": True,
-                "results_by_rule": [
+                "include_detailed_ids_in_summary": False,
+                "actions_planned_or_taken": {
+                    "archive": 10,
+                    "add_label:IMPORTANT_CLIENT": 5
+                },
+                "results_by_rule": [ # This could be optional or part of a more verbose output mode
                     {
                         "rule_id": "rule_archive_old_newsletters",
                         "rule_name": "Archive Old Newsletters",
                         "matched_message_count": 10,
-                        "actions_taken_summary": {"archived": 10}
+                        "actions_taken_summary": {"archive": 10} # This seems to duplicate actions_planned_or_taken
                     },
                     {
                         "rule_id": "rule_label_urgent_reports",
                         "rule_name": "Label Urgent Reports",
                         "matched_message_count": 5,
-                        "actions_taken_summary": {"labeled_urgent": 5}
+                        "actions_taken_summary": {"add_label:IMPORTANT_CLIENT": 5}
                     }
                 ],
                 "overall_status_message": "Dry run complete. 15 actions would have been taken on 15 messages across 2 rules."
@@ -426,31 +455,77 @@ class RuleModelOutput(BaseModel):
 
 # --- damien_list_rules Tool Models ---
 
-class ListRulesOutput(BaseModel):
-    """Output model for the damien_list_rules tool."""
-    rules: List[RuleModelOutput] = Field(description="A list of all configured filtering rules in Damien.")
-    
+class ListRulesParams(MCPToolCallInput):
+    """Input model for the damien_list_rules tool."""
+    summary_view: Optional[bool] = Field(
+        default=True,
+        description="If True (default), returns a summary of each rule (ID, name, description, enabled status). If False, returns the full definition of each rule."
+    )
+    model_config = ConfigDict(
+        json_schema_extra = {
+            "example": {"summary_view": True}
+        }
+    )
+
+class RuleSummaryOutput(BaseModel):
+    """Represents a summary of a filtering rule."""
+    id: str = Field(description="Unique identifier for the rule.")
+    name: str = Field(description="User-defined name for the rule.")
+    description: Optional[str] = Field(default=None, description="Optional detailed description of the rule's purpose.")
+    is_enabled: bool = Field(description="Whether the rule is currently active.")
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
+                "id": "rule_123xyz",
+                "name": "Archive Old Newsletters",
+                "description": "Automatically archives newsletters older than 30 days.",
+                "is_enabled": True
+            }
+        }
+    )
+
+class ListRulesOutput(BaseModel):
+    """Output model for the damien_list_rules tool. Contains either summaries or full rule definitions."""
+    rules: List[Any] = Field(description="A list of rule objects. The structure of objects in this list (RuleSummaryOutput or RuleModelOutput) depends on the 'summary_view' input parameter.")
+    summary_view_active: bool = Field(description="Indicates if the returned rules are summaries (True) or full definitions (False).")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example_summary": {
+                "summary_view_active": True,
                 "rules": [
-                    RuleModelOutput.model_config["json_schema_extra"]["example"],
+                    RuleSummaryOutput.model_config["json_schema_extra"]["example"],
                     {
                         "id": "rule_456abc",
                         "name": "Label Important Client Emails",
                         "description": "Adds 'IMPORTANT_CLIENT' label to emails from clientdomain.com",
-                        "is_enabled": True,
-                        "conditions": [{"field": "from_address", "operator": "ends_with", "value": "@clientdomain.com"}],
-                        "condition_conjunction": "AND",
-                        "actions": [{"type": "add_label", "parameters": {"label_name": "IMPORTANT_CLIENT"}}],
-                        "created_at": "2022-11-01T09:00:00Z",
-                        "updated_at": "2023-03-20T14:45:00Z"
+                        "is_enabled": True
                     }
+                ]
+            },
+            "example_full": {
+                "summary_view_active": False,
+                "rules": [
+                    RuleModelOutput.model_config["json_schema_extra"]["example"]
                 ]
             }
         }
     )
 
+# --- damien_get_rule_details Tool Models ---
+
+class GetRuleDetailsParams(MCPToolCallInput):
+    """Input model for the damien_get_rule_details tool."""
+    rule_id_or_name: str = Field(..., description="The unique ID or exact name of the rule to retrieve.")
+    model_config = ConfigDict(
+        json_schema_extra = {"example": {"rule_id_or_name": "rule_123xyz_or_RuleName"}}
+    )
+
+# Output for get_rule_details is simply RuleModelOutput
+# class GetRuleDetailsOutput(RuleModelOutput):
+#     pass
+# No need for a separate class if it's identical to RuleModelOutput.
+# The router can specify response_model=RuleModelOutput.
 
 # --- damien_add_rule Tool Models ---
 
