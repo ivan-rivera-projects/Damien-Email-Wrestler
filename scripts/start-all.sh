@@ -36,7 +36,6 @@ check_mcp_tools() {
     echo -e " ${RED}✗${NC}"
     return 1
 }
-}
 
 # Function to wait for a service to be healthy
 wait_for_health() {
@@ -99,7 +98,7 @@ else
     ADAPTER_PID=$!
     echo "Smithery Adapter started with PID: $ADAPTER_PID"
     cd ..
-}
+fi
 
 # Wait for services to be healthy
 echo ""
