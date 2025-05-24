@@ -107,7 +107,66 @@ export const staticToolDefinitions: ToolDefinition[] = [
       required: ["message_id"]
     }
   },
-  // Adding static definition for damien_apply_rules
+  {
+    name: "damien_trash_emails",
+    description: "Moves specified emails to the trash folder. Returns a count of trashed emails and a status message.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message_ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "A list of unique message IDs to be moved to the trash folder."
+        }
+      },
+      required: ["message_ids"]
+    }
+  },
+  {
+    name: "damien_label_emails",
+    description: "Adds or removes specified labels from emails. Returns a count of modified emails and a status message.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message_ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "A list of unique message IDs to apply label changes to."
+        },
+        add_label_names: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional. List of label names to add to the specified emails. System labels (e.g., 'IMPORTANT', 'STARRED') and custom label names are supported."
+        },
+        remove_label_names: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional. List of label names to remove from the specified emails. System labels (e.g., 'UNREAD') and custom label names are supported."
+        }
+      },
+      required: ["message_ids"]
+    }
+  },
+  {
+    name: "damien_mark_emails",
+    description: "Marks specified emails as read or unread. Returns a count of modified emails and a status message.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message_ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "A list of unique message IDs to mark as read or unread."
+        },
+        mark_as: {
+          type: "string",
+          enum: ["read", "unread"],
+          description: "Specify whether to mark messages as 'read' or 'unread'. This is case-sensitive."
+        }
+      },
+      required: ["message_ids", "mark_as"]
+    }
+  },
   {
     name: "damien_apply_rules",
     description: "Applies filtering rules to emails in your Gmail account based on various criteria. Can be run in dry-run mode. Returns a detailed summary of actions taken or that would be taken.",
@@ -151,9 +210,7 @@ export const staticToolDefinitions: ToolDefinition[] = [
           description: "Optional. If True, the 'actions_planned_or_taken' in the summary will include lists of affected email IDs. Otherwise (default False), it will contain counts. Set to True if you need to know exactly which emails were affected by each action."
         }
       }
-      // No specific required fields, all are optional with defaults or handled by server logic
     }
-    // outputSchema could also be defined here if needed for the static fallback
   },
   {
     name: "damien_list_rules",
@@ -168,7 +225,6 @@ export const staticToolDefinitions: ToolDefinition[] = [
         }
       }
     }
-    // Output schema varies, client should ideally get this from dynamic endpoint
   },
   {
     name: "damien_get_rule_details",
@@ -183,7 +239,95 @@ export const staticToolDefinitions: ToolDefinition[] = [
       },
       required: ["rule_id_or_name"]
     }
-    // Output schema is complex (full RuleModelOutput), client should ideally get from dynamic endpoint
+  },
+  {
+    name: "damien_add_rule",
+    description: "Adds a new filtering rule to Damien. Expects a full rule definition and returns the created rule, including its server-generated ID and timestamps.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        rule_definition: {
+          type: "object",
+          description: "A model representing the rule to be added. Server will generate 'id', 'created_at', 'updated_at'.",
+          properties: {
+            name: {
+              type: "string",
+              description: "User-defined name for the rule."
+            },
+            description: {
+              type: "string",
+              description: "Optional detailed description of the rule's purpose."
+            },
+            is_enabled: {
+              type: "boolean",
+              default: true,
+              description: "Whether the rule is currently active and will be applied."
+            },
+            conditions: {
+              type: "array",
+              description: "A list of conditions that must be met for the rule to trigger.",
+              items: {
+                type: "object",
+                properties: {
+                  field: { type: "string" },
+                  operator: { type: "string" },
+                  value: {}
+                },
+                required: ["field", "operator", "value"]
+              }
+            },
+            condition_conjunction: {
+              type: "string",
+              enum: ["AND", "OR"],
+              default: "AND",
+              description: "How multiple conditions are combined ('AND' means all must be true, 'OR' means any can be true)."
+            },
+            actions: {
+              type: "array",
+              description: "A list of actions to perform if the conditions are met.",
+              items: {
+                type: "object",
+                properties: {
+                  type: { type: "string" },
+                  parameters: { type: "object" }
+                },
+                required: ["type"]
+              }
+            }
+          },
+          required: ["name", "conditions", "actions"]
+        }
+      },
+      required: ["rule_definition"]
+    }
+  },
+  {
+    name: "damien_delete_rule",
+    description: "Deletes a filtering rule from Damien by its ID or name. Returns a status message and the identifier of the deleted rule.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        rule_identifier: {
+          type: "string",
+          description: "The unique ID or the exact name of the rule to be deleted."
+        }
+      },
+      required: ["rule_identifier"]
+    }
+  },
+  {
+    name: "damien_delete_emails_permanently",
+    description: "PERMANENTLY deletes specified emails from Gmail. This action is irreversible and emails cannot be recovered. Returns a count of deleted emails and a status message.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message_ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "A list of unique message IDs to be permanently deleted. This action cannot be undone."
+        }
+      },
+      required: ["message_ids"]
+    }
   }
-  // ... other static tool definitions would go here
 ];

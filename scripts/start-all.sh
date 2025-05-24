@@ -16,14 +16,26 @@ NC='\033[0m' # No Color
 echo "Synchronizing environment variables..."
 ./scripts/sync-env.sh
 
-# Function to check if a port is in use
-check_port() {
-    local port=$1
-    if lsof -i :$port > /dev/null 2>&1; then
-        return 0
-    else
-        return 1
-    fi
+# Function to check if the MCP Server is fully up and returning tool definitions
+check_mcp_tools() {
+    local url=$1
+    local api_key=$2
+    local max_attempts=30
+    local attempt=0
+    
+    echo -n "Verifying MCP Server tool definitions..."
+    while [ $attempt -lt $max_attempts ]; do
+        if curl -s -H "X-API-Key: $api_key" "$url/mcp/list_tools" | grep -q "damien_list_emails" > /dev/null 2>&1; then
+            echo -e " ${GREEN}✓${NC}"
+            return 0
+        fi
+        echo -n "."
+        sleep 1
+        ((attempt++))
+    done
+    echo -e " ${RED}✗${NC}"
+    return 1
+}
 }
 
 # Function to wait for a service to be healthy
@@ -57,6 +69,25 @@ else
     MCP_PID=$!
     echo "Damien MCP Server started with PID: $MCP_PID"
     cd ..
+    
+    # Give the MCP Server time to start up and initialize
+    echo "Waiting for MCP Server to initialize..."
+    sleep 5
+fi
+
+# Check if MCP Server is healthy before starting Smithery Adapter
+if ! wait_for_health "http://localhost:8892/health" "Damien MCP Server"; then
+    echo -e "${RED}❌ MCP Server failed to start. Not starting Smithery Adapter.${NC}"
+    exit 1
+fi
+
+# Read API key from .env file
+API_KEY=$(grep "DAMIEN_MCP_SERVER_API_KEY" .env | cut -d'=' -f2)
+
+# Verify MCP Server has tools available
+if ! check_mcp_tools "http://localhost:8892" "$API_KEY"; then
+    echo -e "${YELLOW}⚠️  MCP Server tool endpoints not ready. Smithery Adapter may fall back to static tools.${NC}"
+    echo -e "${YELLOW}⚠️  Continuing anyway, but some tools may not be available.${NC}"
 fi
 
 if check_port 8081; then
@@ -68,7 +99,7 @@ else
     ADAPTER_PID=$!
     echo "Smithery Adapter started with PID: $ADAPTER_PID"
     cd ..
-fi
+}
 
 # Wait for services to be healthy
 echo ""
@@ -76,6 +107,17 @@ echo "Checking service health..."
 
 if wait_for_health "http://localhost:8892/health" "Damien MCP Server"; then
     MCP_HEALTHY=true
+    
+    # Read API key from .env file
+    API_KEY=$(grep "DAMIEN_MCP_SERVER_API_KEY" .env | cut -d'=' -f2)
+    
+    # Verify MCP Server is fully initialized with tools
+    if check_mcp_tools "http://localhost:8892" "$API_KEY"; then
+        MCP_TOOLS_READY=true
+    else
+        MCP_TOOLS_READY=false
+        echo -e "${YELLOW}⚠️  MCP Server is running but tool definitions may not be ready. Smithery Adapter may fall back to static tools.${NC}"
+    fi
 else
     MCP_HEALTHY=false
 fi
