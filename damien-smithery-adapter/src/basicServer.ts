@@ -29,7 +29,7 @@ async function startServer(): Promise<void> {
     await damienClient.checkHealth();
     logger.info('Damien MCP Server health check successful');
   } catch (error) {
-    logger.error({ err: error }, 'Damien MCP Server health check failed.');
+    logger.error('Damien MCP Server health check failed.');
     logger.error('Make sure the Damien MCP Server is running at ' + CONFIG.DAMIEN_MCP_SERVER_URL);
   }
 
@@ -39,7 +39,7 @@ async function startServer(): Promise<void> {
     tools = await getDamienToolDefinitions();
     logger.info(`Found ${tools.length} tools from Damien MCP Server`);
   } catch (error) {
-    logger.error({ err: error }, 'Failed to fetch tool definitions.');
+    logger.error('Failed to fetch tool definitions.');
   }
 
   // Health check endpoint
@@ -72,13 +72,13 @@ async function startServer(): Promise<void> {
         });
       }
       
-      logger.info({ tool, input, session_id }, `Executing tool: ${tool}`);
+      logger.info(`Executing tool: ${tool}`);
 
       const result = await damienClient.executeTool(tool, input, session_id);
       
       res.json(result);
     } catch (error: any) {
-      logger.error({ err: error, tool: req.body?.tool, input: req.body?.input }, 'Error executing tool');
+      logger.error('Error executing tool: ' + (error.message || 'Unknown error'));
       res.status(500).json({
         error: 'Error executing tool: ' + (error.message || 'Unknown error')
       });
@@ -92,5 +92,7 @@ async function startServer(): Promise<void> {
     logger.info(`Connected to Damien MCP Server at ${CONFIG.DAMIEN_MCP_SERVER_URL}`);
   });
 }
+
+export { startServer };
 
 export { startServer };

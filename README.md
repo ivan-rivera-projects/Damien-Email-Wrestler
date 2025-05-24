@@ -389,7 +389,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - 📧 Email: ivan.rivera.email@gmail.com
 - 💬 GitHub Issues: [Create an issue](https://github.com/ivan-rivera-projects/Damien-Email-Wrestler/issues)
-- 📖 Documentation: [Wiki](https://github.com/ivan-rivera-projects/Damien-Email-Wrestler/wiki)
 
 ---
 
