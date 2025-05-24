@@ -176,28 +176,26 @@ cd damien-smithery-adapter && npm run serve &
 
 ### Environment Variables
 
-Create a `.env` file in the project root:
+Damien Email Wrestler uses environment variables for configuration. 
 
-```bash
-# Gmail API Configuration
-DAMIEN_GMAIL_CREDENTIALS_PATH=./credentials.json
-DAMIEN_GMAIL_TOKEN_PATH=./damien-cli/data/token.json
+To set up your environment:
 
-# Damien MCP Server
-DAMIEN_MCP_SERVER_API_KEY=your-secure-api-key-here
-DAMIEN_MCP_SERVER_PORT=8892
+1. **Copy the example environment file:**
+   ```bash
+   cp .env.example .env
+   ```
 
-# Smithery Adapter
-SMITHERY_ADAPTER_PORT=8081
-SMITHERY_BEARER_AUTH=your-smithery-token-here
+2. **Generate a secure API key:**
+   ```bash
+   # Generate a random 32-byte hex string for your API key
+   openssl rand -hex 32
+   ```
 
-# AWS DynamoDB (Optional, for session storage)
-AWS_REGION=us-east-1
-DYNAMODB_TABLE_NAME=DamienMCPSessions
+3. **Edit the `.env` file with your specific settings**
 
-# Logging
-LOG_LEVEL=INFO
-```
+For detailed environment setup instructions, see [Environment Setup Guide](ENV_SETUP.md).
+
+The configuration includes:
 
 ### Gmail API Setup
 

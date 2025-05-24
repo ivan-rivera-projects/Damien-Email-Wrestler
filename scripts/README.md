@@ -12,6 +12,7 @@ This directory contains utility scripts for managing the Damien Email Wrestler s
 ```
 
 This script:
+- Synchronizes environment variables using `sync-env.sh`
 - Checks if services are already running (won't start duplicates)
 - Starts the Damien MCP Server on port 8892
 - Starts the Smithery Adapter on port 8081
@@ -65,16 +66,22 @@ This script:
 
 **Prerequisites**: Both services must be running. Use `start-all.sh` first.
 
-### `start.sh`
-**Purpose**: Legacy one-command startup (if present)
+### `sync-env.sh`
+**Purpose**: Synchronize environment variables across all components
 
 ```bash
-./scripts/start.sh
+./scripts/sync-env.sh
 ```
 
-Note: This may be the older startup script. Consider using `start-all.sh` for better control.
+This script:
+- Reads the API key and other configuration from the root `.env` file
+- Updates all component-specific `.env` files with consistent values
+- Ensures all services use the same authentication credentials
+- Prevents API key mismatch issues
 
-## 🔄 Typical Workflow
+**When to use**: After changing the root `.env` file or if experiencing authentication errors between services.
+
+### Typical Workflow
 
 1. **Start services:**
    ```bash
@@ -94,6 +101,21 @@ Note: This may be the older startup script. Consider using `start-all.sh` for be
 4. **Stop services when done:**
    ```bash
    ./scripts/stop-all.sh
+   ```
+
+### API Key Synchronization
+
+If you update the API key in the root `.env` file:
+
+1. **Sync environment variables:**
+   ```bash
+   ./scripts/sync-env.sh
+   ```
+
+2. **Restart services:**
+   ```bash
+   ./scripts/stop-all.sh
+   ./scripts/start-all.sh
    ```
 
 ## 🚨 Troubleshooting

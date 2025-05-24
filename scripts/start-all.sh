@@ -12,6 +12,10 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Run the environment synchronization script first
+echo "Synchronizing environment variables..."
+./scripts/sync-env.sh
+
 # Function to check if a port is in use
 check_port() {
     local port=$1
