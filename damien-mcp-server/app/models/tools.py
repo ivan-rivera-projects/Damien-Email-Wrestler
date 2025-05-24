@@ -13,7 +13,7 @@ an *Output model for its results. The models leverage Pydantic's validation,
 field descriptions, and examples to provide comprehensive documentation.
 """
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import List, Optional, Dict, Any, Literal
 
 from .mcp_protocol import MCPToolCallInput # Base class for tool inputs
@@ -44,7 +44,25 @@ class ListEmailsParams(MCPToolCallInput):
         default=None,
         description="Optional list of header names (e.g., 'From', 'Subject', 'Date', 'To', 'Cc', 'Reply-To', 'Message-ID') to include in each email summary. Requesting specific headers is more efficient than fetching full details later. If omitted, basic summaries (ID, threadId, and potentially a snippet if fetched by default by the CLI) are returned. Check the 'EmailSummary' model for fields that can be populated."
     )
-    
+
+    @field_validator("include_headers", mode="before")
+    @classmethod
+    def parse_include_headers(cls, v):
+        import json
+        if v is None:
+            return v
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if not isinstance(parsed, list) or not all(isinstance(i, str) for i in parsed):
+                    raise ValueError("include_headers must be a list of strings")
+                return parsed
+            except Exception as e:
+                raise ValueError(f"include_headers parsing error: {e}")
+        if not isinstance(v, list) or not all(isinstance(i, str) for i in v):
+            raise ValueError("include_headers must be a list of strings")
+        return v
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -114,6 +132,7 @@ class ListEmailsOutput(BaseModel):
 
 # --- damien_get_email_details Tool Models ---
 
+
 class GetEmailDetailsParams(MCPToolCallInput):
     """Input model for the damien_get_email_details tool."""
     message_id: str = Field(..., description="The unique immutable ID of the email message to retrieve.")
@@ -125,6 +144,25 @@ class GetEmailDetailsParams(MCPToolCallInput):
         default=None,
         description="Optional. If 'format' is 'metadata' (or if this field is provided, format will be treated as 'metadata'), this specifies a list of header names to retrieve (e.g., 'From', 'Subject', 'Date'). Fetches only these headers, overriding fetching all metadata headers. More efficient if only specific headers are needed. Common headers: 'From', 'To', 'Cc', 'Bcc', 'Subject', 'Date', 'Reply-To', 'Message-ID'."
     )
+
+    @field_validator("include_headers", mode="before")
+    @classmethod
+    def parse_include_headers(cls, v):
+        import json
+        if v is None:
+            return v
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if not isinstance(parsed, list) or not all(isinstance(i, str) for i in parsed):
+                    raise ValueError("include_headers must be a list of strings")
+                return parsed
+            except Exception as e:
+                raise ValueError(f"include_headers parsing error: {e}. Expected a list of strings, but received a string that could not be parsed as a JSON list.")
+        if not isinstance(v, list) or not all(isinstance(i, str) for i in v):
+             raise ValueError("include_headers must be a list of strings")
+        return v
+
     model_config = ConfigDict(
         json_schema_extra = {
             "example": {

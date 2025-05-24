@@ -100,6 +100,29 @@ async def execute_tool_endpoint(
     session_id = request_body.session_id
     # user_id from request_body.user_id can be used if needed, else SERVER_USER_ID
 
+    # Debug logging to see exactly what we're receiving
+    logger.info(f"=== DEBUGGING PARAMETERS ===")
+    logger.info(f"Tool: {tool_name}")
+    logger.info(f"Raw params_dict: {params_dict}")
+    logger.info(f"Type of params_dict: {type(params_dict)}")
+    if "include_headers" in params_dict:
+        logger.info(f"include_headers value: {params_dict['include_headers']}")
+        logger.info(f"include_headers type: {type(params_dict['include_headers'])}")
+
+    # Pre-process include_headers parameter if it exists and is a JSON string
+    # This handles the MCP client sending arrays as JSON strings
+    if "include_headers" in params_dict and isinstance(params_dict["include_headers"], str):
+        try:
+            import json
+            parsed_headers = json.loads(params_dict["include_headers"])
+            if isinstance(parsed_headers, list) and all(isinstance(item, str) for item in parsed_headers):
+                params_dict["include_headers"] = parsed_headers
+                logger.info(f"Successfully parsed include_headers from JSON string: {parsed_headers}")
+            else:
+                logger.warning(f"include_headers JSON string did not parse to a list of strings: {parsed_headers}")
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse include_headers as JSON: {e}")
+
     user_id = SERVER_USER_ID
     
     previous_context = None
