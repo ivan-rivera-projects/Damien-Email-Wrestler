@@ -16,6 +16,16 @@ NC='\033[0m' # No Color
 echo "Synchronizing environment variables..."
 ./scripts/sync-env.sh
 
+# Function to check if a port is in use
+check_port() {
+    local port=$1
+    if lsof -i :$port > /dev/null 2>&1; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Function to check if the MCP Server is fully up and returning tool definitions
 check_mcp_tools() {
     local url=$1
