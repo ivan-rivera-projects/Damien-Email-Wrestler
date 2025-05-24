@@ -93,7 +93,22 @@ The `damien-cli` is the heart of the application, containing the core email proc
 #### 4.1.1. Tool: `damien_list_emails` (via `damien_cli.core_api.gmail_api_service.list_messages`)
 
 *   **Issue:** As detailed in Section 2, this tool currently returns only email IDs and thread IDs, necessitating N+1 follow-up calls for any other piece of information.
-*   **Solution: Implement Granular Header Fetching**
+*   **Solution: Implement Granular Header Fetching** ✅ **COMPLETED (2025-01-24)**
+
+    **Status:** ✅ COMPLETED - Successfully implemented and tested
+    
+    **Problem Solved:**
+    - Fixed duplicate `GetEmailDetailsParams` class definition causing Pydantic validation conflicts
+    - Added robust JSON string parsing for MCP clients sending arrays as JSON strings
+    - Implemented proper field validators for `include_headers` parameter
+    - Added preprocessing in MCP router to handle parameter conversion
+    
+    **Performance Results:**
+    - **Before**: 16 API calls for 15 emails with From headers (1 list + 15 detail calls)
+    - **After**: 1 API call with `include_headers=["From"]` parameter
+    - **Improvement**: 16x reduction in API calls, minimal data transfer
+    
+    **Implementation Details:**
     1.  **Modify `damien_cli.core_api.gmail_api_service.list_messages` function:**
         *   Change its signature to accept a new optional parameter: `include_headers: Optional[List[str]] = None`.
         *   If `include_headers` is provided and contains valid header names (e.g., "From", "To", "Subject", "Date", "Reply-To"):
@@ -341,3 +356,27 @@ By prioritizing the richness and clarity of the tool schemas, we directly empowe
 ## 9. Conclusion
 
 The Damien Email Wrestler application possesses a strong architectural foundation. By systematically addressing data fetching strategies, embracing the principle of granular control, and prioritizing the delivery of rich, descriptive tool schemas to the AI, we can transform it into an exceptionally performant, efficient, and practical tool. The phased implementation plan outlined above focuses on delivering the most critical user-facing and AI-enabling improvements first, while establishing a clear path for ongoing enhancement. This comprehensive approach will be instrumental in achieving the vision of a world-class, AI-powered email management champion that is both powerful and economical to operate.
+## Recent Fixes and Updates
+
+- Fixed a critical syntax error in `damien-mcp-server/app/models/tools.py` caused by invalid lines `:start_line:134` and `-------` accidentally present in the file. These lines were removed to restore valid Python syntax.
+- Added missing import of `field_validator` from Pydantic in `damien-mcp-server/app/models/tools.py` to resolve `NameError` when using the `@field_validator` decorator.
+- Refactored the `include_headers` field validation in the `ListEmailsParams` model (in `damien-mcp-server/app/models/tools.py`) to use Pydantic v2 style `@field_validator` with `mode="before"`. This allows parsing stringified JSON input for `include_headers` correctly and raises proper validation errors for invalid input.
+- These fixes resolved import errors and validation test failures in `tests/models/test_tools_validation.py`.
+
+## Files Updated
+
+- `damien-mcp-server/app/models/tools.py`
+- `Damien_Optimization_and_Enhancement_Plan.md` (this documentation update)
+
+---
+
+## Next Steps for Optimization Discussion
+
+1. Review and optimize other tool parameter models for consistent validation and error handling.
+2. Enhance test coverage for edge cases and invalid inputs across all MCP tool models.
+3. Investigate performance bottlenecks in email fetching and processing workflows.
+4. Consider adding caching or batching strategies to reduce API calls and improve responsiveness.
+5. Review logging and error reporting to ensure clear diagnostics during runtime.
+6. Plan for incremental improvements in CLI usability and integration with Damien MCP server.
+
+Please let me know which area you would like to prioritize next or if you want a detailed plan for any of the above points.

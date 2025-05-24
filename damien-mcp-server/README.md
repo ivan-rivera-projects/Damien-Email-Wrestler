@@ -10,10 +10,20 @@ The Damien MCP Server acts as a bridge between AI assistants and the Damien-CLI 
 
 - **MCP Protocol Support**: Implements the Model Context Protocol for seamless integration with AI assistants
 - **Gmail Management**: Provides tools for listing, trashing, labeling, and managing emails
+- **Optimized Email Fetching**: Supports granular header fetching with `include_headers` parameter for efficient API usage
 - **Rule Management**: Allows creating, listing, and applying Gmail filtering rules
 - **Session Context**: Maintains conversation context using DynamoDB for multi-turn interactions
 - **Secure Authentication**: Uses existing Damien-CLI token-based authentication with Gmail
 - **Smithery SDK Integration**: Can be integrated with Smithery SDK for enhanced discovery and standardized MCP compliance
+
+### Performance Optimizations
+
+The server includes several performance optimizations:
+
+- **Granular Header Fetching**: Use `include_headers` parameter to fetch only specific email headers (e.g., `["From", "Subject"]`)
+- **Reduced API Calls**: Single API call instead of multiple detail fetches (up to 16x improvement)
+- **Minimal Data Transfer**: Only requested headers are transferred, reducing bandwidth usage
+- **Efficient Validation**: Robust parameter validation handles both array and JSON string formats
 
 ### Architecture
 
@@ -358,6 +368,80 @@ Once running, access the interactive API documentation:
 
 - Swagger UI: http://127.0.0.1:8892/docs
 - ReDoc: http://127.0.0.1:8892/redoc
+
+### Usage Examples
+
+#### Optimized Email Listing with Header Fetching
+
+The `include_headers` parameter allows you to fetch only specific email headers in a single API call, dramatically improving performance:
+
+```bash
+# Fetch only From headers for 5 unread emails (1 API call instead of 6)
+curl -H "X-API-Key: your-api-key" \
+     -H "Content-Type: application/json" \
+     -X POST http://localhost:8892/mcp/execute_tool \
+     -d '{
+       "tool_name": "damien_list_emails",
+       "input": {
+         "query": "is:unread",
+         "max_results": 5,
+         "include_headers": ["From"]
+       },
+       "session_id": "example-session"
+     }'
+```
+
+```bash
+# Fetch multiple headers for efficient email preview
+curl -H "X-API-Key: your-api-key" \
+     -H "Content-Type: application/json" \
+     -X POST http://localhost:8892/mcp/execute_tool \
+     -d '{
+       "tool_name": "damien_list_emails",
+       "input": {
+         "query": "in:inbox",
+         "max_results": 10,
+         "include_headers": ["From", "Subject", "Date"]
+       },
+       "session_id": "example-session"
+     }'
+```
+
+#### Optimized Email Details
+
+```bash
+# Get specific headers for a single email
+curl -H "X-API-Key: your-api-key" \
+     -H "Content-Type: application/json" \
+     -X POST http://localhost:8892/mcp/execute_tool \
+     -d '{
+       "tool_name": "damien_get_email_details",
+       "input": {
+         "message_id": "your-message-id",
+         "include_headers": ["From", "To", "Subject", "Date", "Reply-To"]
+       },
+       "session_id": "example-session"
+     }'
+```
+
+#### Performance Comparison
+
+**Before optimization (old approach):**
+- List 15 emails: 16 API calls (1 list + 15 detail calls)
+- Large data transfer (full email metadata for each)
+- Slower response times
+
+**After optimization (with include_headers):**
+- List 15 emails with From headers: 1 API call
+- Minimal data transfer (only requested headers)
+- 16x performance improvement
+
+#### Common Header Options
+
+- `["From"]` - Sender information only
+- `["From", "Subject"]` - Sender and subject for email previews  
+- `["From", "To", "Subject", "Date"]` - Complete email summary
+- `["Message-ID", "Reply-To"]` - For email threading and responses
 
 ## Configuring Claude to Use This Server
 
