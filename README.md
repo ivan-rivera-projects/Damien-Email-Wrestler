@@ -6,6 +6,18 @@
 
 Damien Email Wrestler is a comprehensive email management solution that enables AI assistants like Claude to interact with your Gmail account through advanced filtering, organization, and automation capabilities. Built with the Model Context Protocol (MCP) and integrated with the Smithery ecosystem.
 
+## ✨ Recent v2.0 Major Update
+
+🔧 **Complete Tool System Overhaul** - All 23+ MCP tools are now fully functional:
+- **Draft Management**: Create, update, send, and manage email drafts
+- **Settings Control**: Configure vacation responders, IMAP/POP settings
+- **Email Operations**: List, trash, label, mark, and permanently delete emails
+- **Rules Management**: Create, apply, and manage Gmail filtering rules
+
+✅ **Universal Tool Registry** - Implemented centralized tool management system
+✅ **Enhanced Authentication** - Resolved Gmail API access issues across all tools
+✅ **Standardized Error Handling** - Consistent responses and better debugging
+
 ## 🚀 What Does Damien Do?
 
 - **Smart Email Filtering**: Create sophisticated rules to automatically organize your inbox
