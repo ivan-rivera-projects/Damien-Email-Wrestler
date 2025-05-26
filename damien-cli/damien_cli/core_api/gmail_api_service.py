@@ -1,728 +1,847 @@
+from .rate_limiter import with_rate_limiting
+from .exceptions import SettingsOperationError
+from typing import Dict, Any, Optional, List
 import logging
-from pathlib import Path  # Let's use Path
-from typing import Optional, List, Dict, Any  # Make sure these are imported
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from googleapiclient.http import BatchHttpRequest # Added for batch requests
-from damien_cli.core import config as app_config  # For paths and SCOPES
-from .exceptions import (
-    GmailApiError,
-    InvalidParameterError,
-    DamienError,
-)  # Your custom exceptions
 
 logger = logging.getLogger(__name__)
 
-
-# --- Authentication ---
-def get_authenticated_service(interactive_auth_ok: bool = True):
+# Vacation Responder Functions
+@with_rate_limiting
+def get_vacation_settings(gmail_service) -> Dict[str, Any]:
     """
-    Authenticates with Gmail using OAuth 2.0 and returns a service object.
-    Handles token loading, refreshing, and the initial OAuth flow if necessary.
-
-    Args:
-        interactive_auth_ok (bool): If False and interactive authentication (e.g., browser)
-                                   would be required, returns None instead of starting it.
-                                   Defaults to True.
-
-    Returns:
-        Optional[googleapiclient.discovery.Resource]: The Gmail service object, or None
-                                                     if authentication fails or non-interactive
-                                                     auth is requested but not possible.
-    """
-    creds = None
-    token_file_path = Path(
-        app_config.TOKEN_FILE
-    )  # Ensure TOKEN_FILE is a Path object or string
-    credentials_file_path = Path(app_config.CREDENTIALS_FILE)
-
-    if token_file_path.exists():
-        try:
-            creds = Credentials.from_authorized_user_file(
-                str(token_file_path), app_config.SCOPES
-            )
-        except Exception as e:  # Catch potential errors loading token file
-            logger.warning(
-                f"Could not load token from {token_file_path}: {e}. Will attempt re-authentication."
-            )
-            creds = None
-
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            logger.info("Gmail access token is expired. Attempting to refresh.")
-            try:
-                creds.refresh(Request())
-            except Exception as e:
-                logger.error(
-                    f"Failed to refresh Gmail token: {e}. Re-authentication required.",
-                    exc_info=True,
-                )
-                creds = None  # Force re-login by nullifying creds
-
-        if not creds:  # If still no valid creds, need to run the flow
-            if not interactive_auth_ok:
-                logger.info(
-                    "Non-interactive authentication requested, but interactive flow would be required. Returning None."
-                )
-                return None  # Non-interactive mode and requires browser flow
-
-            logger.info("No valid Gmail credentials found. Starting OAuth flow.")
-            if not credentials_file_path.exists():
-                err_msg = f"Credentials file not found at {credentials_file_path}. Cannot authenticate."
-                logger.error(err_msg)
-                raise DamienError(
-                    err_msg
-                    + " Please ensure 'credentials.json' is present and run login."
-                )
-            try:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    str(credentials_file_path), app_config.SCOPES
-                )
-                logger.info("OAuth flow will require user interaction (browser).")
-                creds = flow.run_local_server(
-                    port=0,
-                    prompt="consent",
-                    authorization_prompt_message="DamienCLI needs to authorize Gmail access. Please follow browser instructions.",
-                )
-            except Exception as e:
-                logger.error(f"OAuth flow failed: {e}", exc_info=True)
-                raise DamienError(f"OAuth authorization failed: {e}")
-
-        # Save the credentials for the next run (if obtained/refreshed)
-        if (
-            creds
-        ):  # Only try to save if creds exist (e.g. interactive flow was successful)
-            try:
-                with open(token_file_path, "w") as token_file_handle:
-                    token_file_handle.write(creds.to_json())
-                logger.info(
-                    f"Gmail access token stored successfully at: {token_file_path}"
-                )
-            except IOError as e:
-                logger.error(
-                    f"Failed to save token file at {token_file_path}: {e}",
-                    exc_info=True,
-                )
-                # Non-fatal if creds object is still valid in memory for this session
-
-    if not creds:  # Could happen if non-interactive and no valid token/refresh
-        logger.warning("Failed to obtain valid Gmail credentials.")
-        return None  # Explicitly return None if creds are still not available
-
-    try:
-        service = build("gmail", "v1", credentials=creds)
-        logger.info("Gmail API service built successfully.")
-        return service
-    except HttpError as error:
-        logger.error(
-            f"API error building Gmail service: {error.resp.status} - {error.content}",
-            exc_info=True,
-        )
-        raise GmailApiError(
-            f"API error building Gmail service: {error.resp.status}",
-            original_exception=error,
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error building Gmail service: {e}", exc_info=True)
-        raise DamienError(f"Unexpected error building Gmail service: {e}")
-
-
-def get_g_service_client_from_token(
-    token_file_path_str: str,
-    credentials_file_path_str: str,  # Needed for robust refresh
-    scopes: List[str]
-) -> Any:  # Returns the Google API client resource 'Any' or raises error
-    """
-    Gets an authenticated Gmail API service client non-interactively using stored tokens.
-    Refreshes the token if expired and possible. Saves refreshed token.
-    Raises DamienError or GmailApiError if authentication fails.
+    Get current vacation responder settings.
     
     Args:
-        token_file_path_str (str): Path to the token.json file
-        credentials_file_path_str (str): Path to credentials.json file (needed for refresh)
-        scopes (List[str]): OAuth scopes required for authentication
+        gmail_service: Authenticated Gmail API service
         
     Returns:
-        Any: The Gmail service object
+        Dict containing vacation responder configuration
         
     Raises:
-        DamienError: If token file is missing, invalid, or refresh fails
-        GmailApiError: If API errors occur during service build
+        SettingsOperationError: If API call fails
     """
-    logger.debug(f"Attempting to get Gmail service client from token file: {token_file_path_str}")
-    token_file = Path(token_file_path_str)
-    creds_file = Path(credentials_file_path_str)  # For refresh context
-    
-    if not token_file.exists():
-        msg = f"Token file not found at {token_file}. Please ensure Damien CLI has been logged in."
-        logger.error(msg)
-        raise DamienError(msg)
-    
-    creds: Optional[Credentials] = None
     try:
-        creds = Credentials.from_authorized_user_file(str(token_file), scopes)
+        logger.debug("Getting vacation responder settings")
+        
+        response = gmail_service.users().settings().getVacation(userId='me').execute()
+        
+        logger.info("Retrieved vacation responder settings")
+        return response
+        
     except Exception as e:
-        logger.error(f"Failed to load credentials from token file {token_file}: {e}", exc_info=True)
-        raise DamienError(f"Could not load token from {token_file}: {e}", original_exception=e)
+        logger.error(f"Failed to get vacation settings: {str(e)}")
+        raise SettingsOperationError(f"Failed to get vacation settings: {str(e)}")
+
+@with_rate_limiting
+def update_vacation_settings(gmail_service, enabled: bool, subject: Optional[str] = None, 
+                           body: Optional[str] = None, start_time: Optional[int] = None,
+                           end_time: Optional[int] = None, 
+                           restrict_to_contacts: bool = False,
+                           restrict_to_domain: bool = False) -> Dict[str, Any]:
+    """
+    Update vacation responder settings.
     
-    if not creds:  # Should be caught by above, but as a safeguard
-        raise DamienError(f"Unknown error loading credentials from {token_file}.")
-    
-    if not creds.valid:
-        if creds.expired and creds.refresh_token:
-            logger.info(f"Access token from {token_file} is expired. Attempting refresh.")
-            if not creds_file.exists():  # Check for credentials.json needed for robust refresh
-                msg = f"Credentials file ({creds_file}) not found, which may be needed for token refresh."
-                logger.warning(msg)
-                # Depending on the grant type, refresh might still work without it if refresh_token is powerful enough.
-                # But for some OAuth client types, client_secret from credentials.json is needed.
-            
-            try:
-                # The google-auth library's refresh mechanism will try to use client secrets
-                # from credentials if the flow was originally an installed app flow.
-                # We pass the credentials_file to from_client_secrets_file in InstalledAppFlow,
-                # so the refresh token should be associated with that client_id/secret.
-                creds.refresh(Request())  # Request() is a transport adapter
-                logger.info(f"Access token refreshed successfully using token from {token_file}.")
-                
-                try:
-                    with open(token_file, 'w') as tf:
-                        tf.write(creds.to_json())
-                    logger.info(f"Refreshed token saved to {token_file}.")
-                except IOError as e_io:
-                    logger.error(f"Failed to save refreshed token to {token_file}: {e_io}", exc_info=True)
-                    # Continue with in-memory refreshed token, but log error
-            except Exception as e_refresh:  # Catch specific refresh errors if possible
-                logger.error(f"Failed to refresh access token from {token_file}: {e_refresh}", exc_info=True)
-                raise DamienError(
-                    f"Token refresh failed for {token_file}. Re-authentication via CLI 'damien login' may be required.",
-                    original_exception=e_refresh
-                )
-        else:
-            msg = f"Token from {token_file} is invalid and cannot be refreshed (expired: {creds.expired}, has_refresh: {bool(creds.refresh_token)})."
-            logger.error(msg)
-            raise DamienError(msg + " Re-authentication via CLI 'damien login' may be required.")
-    
-    # At this point, creds should be valid
-    if not creds.valid:  # Final check
-        raise DamienError(f"Failed to obtain valid credentials from {token_file} even after refresh attempt.")
-    
+    Args:
+        gmail_service: Authenticated Gmail API service
+        enabled: Whether vacation responder is enabled
+        subject: Auto-reply subject line
+        body: Auto-reply message body
+        start_time: Start time (Unix timestamp in milliseconds)
+        end_time: End time (Unix timestamp in milliseconds)
+        restrict_to_contacts: Only reply to contacts
+        restrict_to_domain: Only reply to domain members
+        
+    Returns:
+        Dict containing updated vacation responder configuration
+        
+    Raises:
+        SettingsOperationError: If update fails
+    """
     try:
-        service = build('gmail', 'v1', credentials=creds)
-        logger.debug(f"Gmail API service client built successfully using token from {token_file}.")
-        return service
-    except HttpError as error:
-        logger.error(f"API error building Gmail service with token from {token_file}: {error.resp.status} - {error.content}", exc_info=True)
-        raise GmailApiError(f"API error building Gmail service: {error.resp.status}", original_exception=error)
+        logger.debug(f"Updating vacation responder: enabled={enabled}")
+        
+        # Build vacation responder object
+        vacation_settings = {
+            'enableAutoReply': enabled,
+            'restrictToContacts': restrict_to_contacts,
+            'restrictToDomain': restrict_to_domain
+        }
+        
+        # Add optional fields if provided
+        if subject is not None:
+            vacation_settings['responseSubject'] = subject
+        if body is not None:
+            vacation_settings['responseBodyPlainText'] = body
+        if start_time is not None:
+            vacation_settings['startTime'] = str(start_time)
+        if end_time is not None:
+            vacation_settings['endTime'] = str(end_time)
+        
+        # Make API call
+        response = gmail_service.users().settings().updateVacation(
+            userId='me', 
+            body=vacation_settings
+        ).execute()
+        
+        logger.info(f"Updated vacation responder settings: enabled={enabled}")
+        return response
+        
     except Exception as e:
-        logger.error(f"Unexpected error building Gmail service with token from {token_file}: {e}", exc_info=True)
-        raise DamienError(f"Unexpected error building Gmail service: {e}")
+        logger.error(f"Failed to update vacation settings: {str(e)}")
+        raise SettingsOperationError(f"Failed to update vacation settings: {str(e)}")
 
-
-# --- Batch Operations Helpers ---
-_BATCH_MAX_REQUESTS = 100  # Gmail API limit for batch requests is 100
-
-def _extract_header_value(api_headers_list: List[Dict[str, str]], header_name: str) -> Optional[str]:
-    """Extracts a specific header value from a list of Gmail API headers."""
-    for header in api_headers_list:
-        if header.get("name", "").lower() == header_name.lower():
-            return header.get("value")
-    return None
-
-def _batch_get_messages_metadata(
-    service: Any,
-    message_ids: List[str],
-    headers_to_include: List[str],
-) -> List[Dict[str, Any]]:
+def enable_vacation_responder(gmail_service, subject: str, body: str, 
+                            start_time: Optional[int] = None, 
+                            end_time: Optional[int] = None,
+                            restrict_to_contacts: bool = False) -> Dict[str, Any]:
     """
-    Fetches metadata (id, threadId, and specified headers) for a list of message IDs
-    using batch requests.
+    Enable vacation responder with specified message.
+    
+    Args:
+        gmail_service: Authenticated Gmail API service
+        subject: Auto-reply subject line
+        body: Auto-reply message body
+        start_time: Optional start time (Unix timestamp in milliseconds)
+        end_time: Optional end time (Unix timestamp in milliseconds)
+        restrict_to_contacts: Only reply to known contacts
+        
+    Returns:
+        Dict containing vacation responder configuration
     """
-    if not message_ids:
-        return []
-    if not headers_to_include:
-        logger.warning("_batch_get_messages_metadata called with no headers_to_include. Returning minimal info.")
-        # This case should ideally be prevented by the caller, but if it happens,
-        # return id and threadId (though threadId isn't available without a get)
-        # For simplicity here, we'll return what we can, assuming caller handles it.
-        # A more robust approach might be to fetch minimal details or raise an error.
-        # However, list_messages will call this only if headers_to_include is non-empty.
-        return [{"id": msg_id, "threadId": None, "error": "No headers requested for batch fetch."} for msg_id in message_ids]
-
-    all_processed_messages: List[Dict[str, Any]] = []
+    # Validate inputs
+    if not subject.strip():
+        raise ValueError("Subject cannot be empty")
+    if not body.strip():
+        raise ValueError("Body cannot be empty")
     
-    # Process message_ids in chunks to respect API batch limits
-    for i in range(0, len(message_ids), _BATCH_MAX_REQUESTS):
-        current_batch_ids = message_ids[i:i + _BATCH_MAX_REQUESTS]
-        batch_processed_messages_map: Dict[str, Dict[str, Any]] = {} # Using dict for this batch's results
-
-        def _callback(request_id: str, response: Optional[Dict[str, Any]], exception: Optional[HttpError]):
-            nonlocal batch_processed_messages_map # Modify map for the current batch
-            message_id_for_request = request_id
-
-            if exception:
-                logger.error(
-                    f"Error in batch request for message ID {message_id_for_request}: {exception}",
-                    exc_info=False, # Keep log concise for batch errors
-                )
-                batch_processed_messages_map[message_id_for_request] = {
-                    "id": message_id_for_request,
-                    "threadId": None,
-                    "error": f"API error: {str(exception)}",
-                    **{header_name: None for header_name in headers_to_include}
-                }
-                return
-
-            if response:
-                msg_data: Dict[str, Any] = {
-                    "id": response.get("id"),
-                    "threadId": response.get("threadId"),
-                }
-                
-                # --- BEGIN DEBUG LOGGING ---
-                payload = response.get("payload")
-                if payload:
-                    api_headers = payload.get("headers", [])
-                    logger.debug(f"Message ID {message_id_for_request}: Payload found. Headers count: {len(api_headers)}")
-                    if not api_headers:
-                        logger.debug(f"Message ID {message_id_for_request}: Headers list is empty. Payload keys: {payload.keys()}")
-                    # Optionally log all headers for one message to see their structure:
-                    # if message_id_for_request == current_batch_ids[0] and api_headers: # Log only for first message in batch
-                    #    logger.debug(f"Message ID {message_id_for_request}: Raw headers: {api_headers}")
-                else:
-                    api_headers = []
-                    logger.debug(f"Message ID {message_id_for_request}: Payload is None or missing.")
-                # --- END DEBUG LOGGING ---
-                
-                for header_name in headers_to_include:
-                    msg_data[header_name] = _extract_header_value(api_headers, header_name)
-                batch_processed_messages_map[message_id_for_request] = msg_data
-            else:
-                logger.warning(f"No response and no exception for message ID {message_id_for_request} in batch.")
-                batch_processed_messages_map[message_id_for_request] = {
-                    "id": message_id_for_request,
-                    "threadId": None,
-                    "error": "Unknown error: No response and no exception in batch item.",
-                    **{header_name: None for header_name in headers_to_include}
-                }
-
-        batch_request = service.new_batch_http_request(callback=_callback)
-        for msg_id in current_batch_ids:
-            batch_request.add(
-                service.users().messages().get(
-                    userId="me", id=msg_id, format="full", metadataHeaders=",".join(headers_to_include) # Use "full" to reliably get headers
-                ),
-                request_id=msg_id
-            )
-        
-        try:
-            batch_request.execute()
-        except HttpError as e:
-            logger.error(f"Critical HTTP error during batch execution for IDs {current_batch_ids}: {e}", exc_info=True)
-            # Mark all messages in this specific batch as errored if the whole batch itself fails
-            for msg_id in current_batch_ids:
-                if msg_id not in batch_processed_messages_map: # Avoid overwriting if callback somehow ran
-                    batch_processed_messages_map[msg_id] = {
-                        "id": msg_id,
-                        "threadId": None,
-                        "error": f"Batch execution failed: {str(e)}",
-                        **{header_name: None for header_name in headers_to_include}
-                    }
-        except Exception as e: # Catch other unexpected errors during batch.execute()
-            logger.error(f"Unexpected critical error during batch execution for IDs {current_batch_ids}: {e}", exc_info=True)
-            for msg_id in current_batch_ids:
-                if msg_id not in batch_processed_messages_map:
-                    batch_processed_messages_map[msg_id] = {
-                        "id": msg_id,
-                        "threadId": None,
-                        "error": f"Unexpected batch execution error: {str(e)}",
-                        **{header_name: None for header_name in headers_to_include}
-                    }
-        
-        # Append results from this batch to the main list, maintaining original order of current_batch_ids
-        for msg_id in current_batch_ids:
-            if msg_id in batch_processed_messages_map:
-                all_processed_messages.append(batch_processed_messages_map[msg_id])
-            else:
-                # This implies an ID was in current_batch_ids but not processed by callback or batch error handling
-                logger.warning(f"Message ID {msg_id} was not found in current batch processing results. Adding placeholder.")
-                all_processed_messages.append({
-                    "id": msg_id,
-                    "threadId": None,
-                    "error": "Message not processed in batch (missing from callback results).",
-                    **{header_name: None for header_name in headers_to_include}
-                })
-                
-    return all_processed_messages
-
-# --- Label Operations ---
-_label_name_to_id_cache: Dict[str, str] = {}
-_system_labels = [
-    "INBOX",
-    "SPAM",
-    "TRASH",
-    "UNREAD",
-    "IMPORTANT",
-    "STARRED",
-    "SENT",
-    "DRAFT",
-    "CATEGORY_PERSONAL",
-    "CATEGORY_SOCIAL",
-    "CATEGORY_PROMOTIONS",
-    "CATEGORY_UPDATES",
-    "CATEGORY_FORUMS",
-]
-
-
-def _clear_label_cache_for_testing():
-    """ONLY FOR TESTING: Clears the internal label cache."""
-    _label_name_to_id_cache.clear()
-
-def _populate_label_cache(service: Any):
-    """Helper to fetch and populate the label cache. Stores name->id, id->id, and id->name."""
-    if not service:
-        raise InvalidParameterError(
-            "Gmail service not available for populating label cache."
-        )
-
-    try:
-        logger.debug("Populating Gmail label cache...")
-        results = service.users().labels().list(userId="me").execute()
-        labels = results.get("labels", [])
-        
-        current_cache = _label_name_to_id_cache.copy()  # Preserve existing entries if any
-        _label_name_to_id_cache.clear()  # Clear before repopulating for a full refresh
-        for lbl in labels:
-            _label_name_to_id_cache[lbl["name"].lower()] = lbl["id"]  # For name lookup (name -> id)
-            _label_name_to_id_cache[lbl["id"]] = lbl["id"]  # For ID passthrough (id -> id)
-            _label_name_to_id_cache[f"name_for_{lbl['id']}"] = lbl["name"]  # For ID to Name lookup (id -> name)
-        
-        logger.debug(
-            f"Label cache populated. New size: {len(_label_name_to_id_cache)} entries."
-        )
-    except HttpError as e:
-        logger.error(
-            f"API error fetching labels for cache: {e.resp.status} - {e.content}",
-            exc_info=True,
-        )
-        raise GmailApiError(
-            f"API error fetching labels: {e.resp.status}", original_exception=e
-        )
-
-
-def get_label_id(service: Any, label_name_or_id: str) -> Optional[str]:
-    """Gets the ID of a label given its name or confirms an ID. Caches results."""
-    if not service:
-        # This path should ideally not be hit if service is always checked by caller
-        logger.error("get_label_id called with no service.")
-        raise InvalidParameterError("Gmail service not available for get_label_id.")
-    if not label_name_or_id:
-        raise InvalidParameterError("Label name or ID cannot be empty.")
-    
-    label_name_or_id_upper = label_name_or_id.upper()
-    if label_name_or_id_upper in _system_labels:
-        return label_name_or_id_upper
-    
-    if not _label_name_to_id_cache: 
-        _populate_label_cache(service)
-    
-    # Check 1: Direct match (could be an ID or a case-sensitive name that's already an ID)
-    if label_name_or_id in _label_name_to_id_cache:
-        return _label_name_to_id_cache[label_name_or_id] 
-    
-    # Check 2: Case-insensitive name lookup
-    found_id = _label_name_to_id_cache.get(label_name_or_id.lower())
-    
-    if not found_id: 
-        logger.warning(f"Label '{label_name_or_id}' not found in cache after initial population. Forcing refresh.")
-        _populate_label_cache(service) 
-        
-        if label_name_or_id in _label_name_to_id_cache: # Re-check direct
-            return _label_name_to_id_cache[label_name_or_id]
-        found_id = _label_name_to_id_cache.get(label_name_or_id.lower()) # Re-check lowercase
-        
-        if not found_id:
-            logger.warning(f"Label '{label_name_or_id}' still not found after cache refresh.")
-            return None
-    return found_id
-
-
-def get_label_name_from_id(service: Any, label_id: str) -> Optional[str]:
-    """Gets the display name of a label given its ID. Caches results."""
-    if not service:
-        raise InvalidParameterError("Gmail service not available for get_label_name_from_id.")
-    if not label_id:
-        raise InvalidParameterError("Label ID cannot be empty for get_label_name_from_id.")
-    
-    label_id_upper = label_id.upper()
-    if label_id_upper in _system_labels: # System labels use their name as ID
-        return label_id_upper
-    
-    cache_key_for_name = f"name_for_{label_id}"
-    if not _label_name_to_id_cache or cache_key_for_name not in _label_name_to_id_cache: 
-        _populate_label_cache(service) # Populate if cache is empty or specific ID->name mapping missing
-    
-    found_name = _label_name_to_id_cache.get(cache_key_for_name)
-    if not found_name:
-        logger.warning(f"Label name for ID '{label_id}' not found in cache even after populating. Forcing refresh.")
-        _populate_label_cache(service) # Try one more time
-        found_name = _label_name_to_id_cache.get(cache_key_for_name)
-        if not found_name:
-            logger.warning(f"Label name for ID '{label_id}' still not found after cache refresh.")
-            return None # Or return the ID itself if a name can't be found? Or raise error?
-    return found_name
-
-
-# --- Message Read Operations ---
-def list_messages(
-    service: Any,
-    query_string: Optional[str] = None,
-    max_results: int = 100,
-    page_token: Optional[str] = None,
-    include_headers: Optional[List[str]] = None,
-) -> Dict[str, Any]:
-    """
-    Lists messages matching the query.
-    If include_headers is provided, fetches specified headers for each message.
-    Returns dict with 'messages' and 'nextPageToken'.
-    """
-    if not service:
-        raise InvalidParameterError("Gmail service not available for list_messages.")
-
-    try:
-        list_params: Dict[str, Any] = {"userId": "me", "maxResults": max_results}
-        if query_string:
-            list_params["q"] = query_string
-        if page_token:
-            list_params["pageToken"] = page_token
-
-        logger.debug(f"API: Listing messages with params: {list_params}, include_headers: {include_headers}")
-        id_list_response = service.users().messages().list(**list_params).execute()
-        
-        message_stubs = id_list_response.get("messages", [])
-        next_page_token_val = id_list_response.get("nextPageToken")
-
-        if include_headers and message_stubs:
-            message_ids_to_fetch = [stub["id"] for stub in message_stubs if stub.get("id")]
-            if message_ids_to_fetch:
-                logger.debug(f"Fetching details for {len(message_ids_to_fetch)} messages with headers: {include_headers}")
-                detailed_messages = _batch_get_messages_metadata(
-                    service, message_ids_to_fetch, include_headers
-                )
-                return {"messages": detailed_messages, "nextPageToken": next_page_token_val}
-            else: # No valid IDs in stubs, return empty with token
-                return {"messages": [], "nextPageToken": next_page_token_val}
-        else:
-            # Return basic stubs if no headers requested or no messages found
-            return {"messages": message_stubs, "nextPageToken": next_page_token_val}
-
-    except HttpError as error:
-        logger.error(
-            f"API error listing messages: {error.resp.status} - {error.content}",
-            exc_info=True,
-        )
-        raise GmailApiError(
-            f"API error listing messages: {error.resp.status}", original_exception=error
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error listing messages: {e}", exc_info=True)
-        raise DamienError(f"Unexpected error listing messages: {e}")
-
-
-def get_message_details(
-    service: Any,
-    message_id: str,
-    email_format: str = "metadata",
-    include_headers: Optional[List[str]] = None,
-) -> Dict[str, Any]:
-    """
-    Gets a specific message by its ID.
-    If include_headers is provided, fetches only specified headers with format 'METADATA'.
-    """
-    if not service:
-        raise InvalidParameterError("Gmail service not available for get_message_details.")
-    if not message_id:
-        raise InvalidParameterError("Message ID cannot be empty.")
-
-    get_params: Dict[str, Any] = {"userId": "me", "id": message_id}
-
-    if include_headers:
-        get_params["format"] = "full" # Use "full" to reliably get headers when specific ones are requested
-        get_params["metadataHeaders"] = ",".join(include_headers) # metadataHeaders is still useful with "full" to signal intent
-        logger.debug(
-            f"API: Getting message (ID: {message_id}) with specific headers: {include_headers}"
-        )
-    else:
-        valid_formats = ["full", "metadata", "raw"]
-        actual_format = email_format.lower()
-        if actual_format not in valid_formats:
-            logger.warning(
-                f"Invalid email_format '{email_format}' for get_message_details. Defaulting to 'metadata'."
-            )
-            actual_format = "metadata"
-        get_params["format"] = actual_format
-        logger.debug(
-            f"API: Getting message details for ID: {message_id}, Format: {actual_format}"
-        )
-
-    try:
-        message = service.users().messages().get(**get_params).execute()
-        return message
-    except HttpError as error:
-        logger.error(
-            f"API error getting message (ID: {message_id}): {error.resp.status} - {error.content}",
-            exc_info=True,
-        )
-        raise GmailApiError(
-            f"API error getting message (ID: {message_id}): {error.resp.status}",
-            original_exception=error,
-        )
-    except Exception as e:
-        logger.error(
-            f"Unexpected error getting message (ID: {message_id}): {e}", exc_info=True
-        )
-        raise DamienError(f"Unexpected error getting message (ID: {message_id}): {e}")
-
-
-# --- Message Write Operations ---
-def batch_modify_message_labels(
-    service: Any,
-    message_ids: List[str],
-    add_label_names: Optional[List[str]] = None,
-    remove_label_names: Optional[List[str]] = None,
-) -> bool:
-    """Modifies labels on a batch of messages. Translates label names to IDs."""
-    if not service:
-        raise InvalidParameterError(
-            "Gmail service not available for batch_modify_message_labels."
-        )
-    if not message_ids:
-        logger.debug(
-            "batch_modify_message_labels called with no message_ids. No action taken."
-        )
-        return True
-
-    actual_add_label_ids: List[str] = []
-    if add_label_names:
-        for name in add_label_names:
-            label_id = get_label_id(
-                service, name
-            )  # get_label_id now raises InvalidParameterError if service is None
-            if label_id:
-                actual_add_label_ids.append(label_id)
-            else:
-                logger.warning(f"Label name '{name}' not found, skipping for 'add'.")
-
-    actual_remove_label_ids: List[str] = []
-    if remove_label_names:
-        for name in remove_label_names:
-            label_id = get_label_id(service, name)
-            if label_id:
-                actual_remove_label_ids.append(label_id)
-            else:
-                logger.warning(f"Label name '{name}' not found, skipping for 'remove'.")
-
-    body: Dict[str, Any] = {}
-    if actual_add_label_ids:
-        body["addLabelIds"] = actual_add_label_ids
-    if actual_remove_label_ids:
-        body["removeLabelIds"] = actual_remove_label_ids
-
-    if not body:
-        logger.info("No valid label changes to apply after name resolution.")
-        return True
-
-    body["ids"] = message_ids
-    try:
-        logger.info(
-            f"API: Batch modifying labels for {len(message_ids)} messages. Request body: {body}"
-        )
-        service.users().messages().batchModify(userId="me", body=body).execute()
-        logger.info(
-            f"Successfully batch modified labels for {len(message_ids)} messages."
-        )
-        return True
-    except HttpError as error:
-        logger.error(
-            f"API error during batch label modification: {error.resp.status} - {error.content}",
-            exc_info=True,
-        )
-        raise GmailApiError(
-            f"API error during batch label modification: {error.resp.status}",
-            original_exception=error,
-        )
-    except Exception as e:
-        logger.error(
-            f"Unexpected error during batch label modification: {e}", exc_info=True
-        )
-        raise DamienError(f"Unexpected error during batch label modification: {e}")
-
-
-def batch_trash_messages(service: Any, message_ids: List[str]) -> bool:
-    """Moves a batch of messages to Trash."""
-    logger.info(f"API: Preparing to move {len(message_ids)} messages to Trash.")
-    return batch_modify_message_labels(
-        service,
-        message_ids,
-        add_label_names=["TRASH"],
-        remove_label_names=["INBOX", "UNREAD"],
+    return update_vacation_settings(
+        gmail_service=gmail_service,
+        enabled=True,
+        subject=subject,
+        body=body,
+        start_time=start_time,
+        end_time=end_time,
+        restrict_to_contacts=restrict_to_contacts
     )
 
+def disable_vacation_responder(gmail_service) -> Dict[str, Any]:
+    """
+    Disable vacation responder.
+    
+    Args:
+        gmail_service: Authenticated Gmail API service
+        
+    Returns:
+        Dict containing updated vacation responder configuration
+    """
+    return update_vacation_settings(gmail_service=gmail_service, enabled=False)
 
-def batch_mark_messages(service: Any, message_ids: List[str], mark_as: str) -> bool:
-    """Marks a batch of messages as read or unread."""
-    if mark_as.lower() == "read":
-        logger.info(f"API: Preparing to mark {len(message_ids)} messages as read.")
-        return batch_modify_message_labels(
-            service, message_ids, remove_label_names=["UNREAD"]
-        )
-    elif mark_as.lower() == "unread":
-        logger.info(f"API: Preparing to mark {len(message_ids)} messages as unread.")
-        return batch_modify_message_labels(
-            service, message_ids, add_label_names=["UNREAD"]
-        )
-    else:
-        err_msg = f"Invalid mark_as action '{mark_as}'. Use 'read' or 'unread'."
-        logger.error(err_msg)
-        raise InvalidParameterError(err_msg)
-
-
-def batch_delete_permanently(service: Any, message_ids: List[str]) -> bool:
-    """Permanently deletes a batch of messages."""
-    if not service:
-        raise InvalidParameterError(
-            "Gmail service not available for batch_delete_permanently."
-        )
-    if not message_ids:
-        logger.debug(
-            "batch_delete_permanently called with no message_ids. No action taken."
-        )
-        return True
-
-    body = {"ids": message_ids}
+# IMAP Settings Functions
+@with_rate_limiting
+def get_imap_settings(gmail_service) -> Dict[str, Any]:
+    """
+    Get current IMAP settings.
+    
+    Args:
+        gmail_service: Authenticated Gmail API service
+        
+    Returns:
+        Dict containing IMAP configuration
+        
+    Raises:
+        SettingsOperationError: If API call fails
+    """
     try:
-        logger.warning(
-            f"API: PERMANENTLY DELETING {len(message_ids)} messages. Request body: {body}"
-        )  # Warning for destructive op
-        service.users().messages().batchDelete(userId="me", body=body).execute()
-        logger.info(
-            f"Successfully batch deleted {len(message_ids)} messages permanently."
-        )
-        return True
-    except HttpError as error:
-        logger.error(
-            f"API error during batch permanent deletion: {error.resp.status} - {error.content}",
-            exc_info=True,
-        )
+        logger.debug("Getting IMAP settings")
+        
+        response = gmail_service.users().settings().getImap(userId='me').execute()
+        
+        logger.info("Retrieved IMAP settings")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Failed to get IMAP settings: {str(e)}")
+        raise SettingsOperationError(f"Failed to get IMAP settings: {str(e)}")
+
+@with_rate_limiting
+def update_imap_settings(gmail_service, enabled: bool, 
+                        auto_expunge: bool = False,
+                        expunge_behavior: str = 'archive',
+                        max_folder_size: Optional[int] = None) -> Dict[str, Any]:
+    """
+    Update IMAP settings.
+    
+    Args:
+        gmail_service: Authenticated Gmail API service
+        enabled: Whether IMAP access is enabled
+        auto_expunge: Whether to auto-expunge deleted messages
+        expunge_behavior: What to do with expunged messages ('archive', 'trash', 'delete')
+        max_folder_size: Maximum folder size in MB
+        
+    Returns:
+        Dict containing updated IMAP configuration
+        
+    Raises:
+        SettingsOperationError: If update fails
+    """
+    try:
+        logger.debug(f"Updating IMAP settings: enabled={enabled}")
+        
+        # Build IMAP settings object
+        imap_settings = {
+            'enabled': enabled,
+            'autoExpunge': auto_expunge,
+            'expungeBehavior': expunge_behavior.upper()
+        }
+        
+        if max_folder_size is not None:
+            imap_settings['maxFolderSize'] = max_folder_size
+        
+        # Make API call
+        response = gmail_service.users().settings().updateImap(
+            userId='me', 
+            body=imap_settings
+        ).execute()
+        
+        logger.info(f"Updated IMAP settings: enabled={enabled}")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Failed to update IMAP settings: {str(e)}")
+        raise SettingsOperationError(f"Failed to update IMAP settings: {str(e)}")
+
+# POP Settings Functions  
+@with_rate_limiting
+def get_pop_settings(gmail_service) -> Dict[str, Any]:
+    """
+    Get current POP settings.
+    
+    Args:
+        gmail_service: Authenticated Gmail API service
+        
+    Returns:
+        Dict containing POP configuration
+        
+    Raises:
+        SettingsOperationError: If API call fails
+    """
+    try:
+        logger.debug("Getting POP settings")
+        
+        response = gmail_service.users().settings().getPop(userId='me').execute()
+        
+        logger.info("Retrieved POP settings")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Failed to get POP settings: {str(e)}")
+        raise SettingsOperationError(f"Failed to get POP settings: {str(e)}")
+
+@with_rate_limiting
+def update_pop_settings(gmail_service, access_window: str, disposition: str) -> Dict[str, Any]:
+    """
+    Update POP settings.
+    
+    Args:
+        gmail_service: Authenticated Gmail API service
+        access_window: When to allow POP access ('allMail', 'fromNowOn', 'disabled')
+        disposition: What to do with accessed messages ('leaveInInbox', 'archive', 'trash', 'delete')
+        
+    Returns:
+        Dict containing updated POP configuration
+        
+    Raises:
+        SettingsOperationError: If update fails
+    """
+    try:
+        logger.debug(f"Updating POP settings: access={access_window}, disposition={disposition}")
+        
+        # Validate inputs
+        valid_access_windows = ['allMail', 'fromNowOn', 'disabled']
+        valid_dispositions = ['leaveInInbox', 'archive', 'trash', 'delete']
+        
+        if access_window not in valid_access_windows:
+            raise ValueError(f"Invalid access_window. Must be one of: {valid_access_windows}")
+        if disposition not in valid_dispositions:
+            raise ValueError(f"Invalid disposition. Must be one of: {valid_dispositions}")
+        
+        # Build POP settings object
+        pop_settings = {
+            'accessWindow': access_window,
+            'disposition': disposition
+        }
+        
+        # Make API call
+        response = gmail_service.users().settings().updatePop(
+            userId='me', 
+            body=pop_settings
+        ).execute()
+        
+        logger.info(f"Updated POP settings: access={access_window}, disposition={disposition}")
+        return response
+        
+    except ValueError as e:
+        logger.error(f"Invalid POP settings: {str(e)}")
+        raise SettingsOperationError(f"Invalid POP settings: {str(e)}")
+    except Exception as e:
+        logger.error(f"Failed to update POP settings: {str(e)}")
+        raise SettingsOperationError(f"Failed to update POP settings: {str(e)}")
+
+
+# Draft Management Functions
+@with_rate_limiting
+def create_draft(gmail_service, to_addresses: List[str], subject: str, body: str, 
+                cc: Optional[List[str]] = None, bcc: Optional[List[str]] = None, 
+                thread_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Create a new draft email.
+    
+    Args:
+        gmail_service: Authenticated Gmail API service
+        to_addresses: List of recipient email addresses
+        subject: Email subject line
+        body: Email body content
+        cc: Optional list of CC recipients
+        bcc: Optional list of BCC recipients
+        thread_id: Optional thread ID for replies
+        
+    Returns:
+        Dict containing the created draft information
+        
+    Raises:
+        GmailApiError: If API call fails
+    """
+    try:
+        logger.debug(f"Creating draft to {to_addresses} with subject: {subject}")
+        
+        # Build the message
+        message = {
+            'raw': _build_email_message(to_addresses, subject, body, cc, bcc)
+        }
+        
+        # Add thread ID if provided (for replies)
+        if thread_id:
+            message['threadId'] = thread_id
+        
+        # Create the draft
+        draft_body = {'message': message}
+        response = gmail_service.users().drafts().create(
+            userId='me', 
+            body=draft_body
+        ).execute()
+        
+        logger.info(f"Created draft with ID: {response.get('id')}")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Failed to create draft: {str(e)}")
+        raise GmailApiError(f"Failed to create draft: {str(e)}")
+
+@with_rate_limiting
+def update_draft(gmail_service, draft_id: str, to_addresses: Optional[List[str]] = None,
+                subject: Optional[str] = None, body: Optional[str] = None,
+                cc: Optional[List[str]] = None, bcc: Optional[List[str]] = None) -> Dict[str, Any]:
+    """
+    Update an existing draft email.
+    
+    Args:
+        gmail_service: Authenticated Gmail API service
+        draft_id: ID of the draft to update
+        to_addresses: Optional new recipient list
+        subject: Optional new subject line
+        body: Optional new body content
+        cc: Optional new CC recipients
+        bcc: Optional new BCC recipients
+        
+    Returns:
+        Dict containing the updated draft information
+        
+    Raises:
+        GmailApiError: If API call fails
+    """
+    try:
+        logger.debug(f"Updating draft {draft_id}")
+        
+        # Get current draft to preserve unchanged fields
+        current_draft = gmail_service.users().drafts().get(
+            userId='me', 
+            id=draft_id
+        ).execute()
+        
+        # Extract current message details
+        current_message = current_draft['message']
+        current_payload = current_message.get('payload', {})
+        current_headers = {h['name']: h['value'] for h in current_payload.get('headers', [])}
+        
+        # Use provided values or fall back to current ones
+        final_to = to_addresses or [current_headers.get('To', '')]
+        final_subject = subject or current_headers.get('Subject', '')
+        final_body = body or _extract_body_from_payload(current_payload)
+        final_cc = cc or ([current_headers.get('Cc')] if current_headers.get('Cc') else None)
+        final_bcc = bcc or ([current_headers.get('Bcc')] if current_headers.get('Bcc') else None)
+        
+        # Build updated message
+        message = {
+            'raw': _build_email_message(final_to, final_subject, final_body, final_cc, final_bcc)
+        }
+        
+        # Preserve thread ID if it exists
+        if current_message.get('threadId'):
+            message['threadId'] = current_message['threadId']
+        
+        # Update the draft
+        draft_body = {'message': message}
+        response = gmail_service.users().drafts().update(
+            userId='me',
+            id=draft_id,
+            body=draft_body
+        ).execute()
+        
+        logger.info(f"Updated draft {draft_id}")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Failed to update draft {draft_id}: {str(e)}")
+        raise GmailApiError(f"Failed to update draft {draft_id}: {str(e)}")
+
+@with_rate_limiting
+def send_draft(gmail_service, draft_id: str) -> Dict[str, Any]:
+    """
+    Send an existing draft email.
+    
+    Args:
+        gmail_service: Authenticated Gmail API service
+        draft_id: ID of the draft to send
+        
+    Returns:
+        Dict containing the sent message information
+        
+    Raises:
+        GmailApiError: If API call fails
+    """
+    try:
+        logger.debug(f"Sending draft {draft_id}")
+        
+        response = gmail_service.users().drafts().send(
+            userId='me',
+            body={'id': draft_id}
+        ).execute()
+        
+        logger.info(f"Sent draft {draft_id} as message {response.get('id')}")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Failed to send draft {draft_id}: {str(e)}")
+        raise GmailApiError(f"Failed to send draft {draft_id}: {str(e)}")
+
+@with_rate_limiting
+def list_drafts(gmail_service, query: Optional[str] = None, 
+               max_results: int = 100, page_token: Optional[str] = None) -> Dict[str, Any]:
+    """
+    List draft emails with optional filtering.
+    
+    Args:
+        gmail_service: Authenticated Gmail API service
+        query: Optional Gmail query string to filter drafts
+        max_results: Maximum number of drafts to return (default: 100)
+        page_token: Optional page token for pagination
+        
+    Returns:
+        Dict containing list of drafts and pagination info
+        
+    Raises:
+        GmailApiError: If API call fails
+    """
+    try:
+        logger.debug(f"Listing drafts with query: {query}")
+        
+        # Build request parameters
+        params = {
+            'userId': 'me',
+            'maxResults': min(max_results, 500)  # Gmail API max is 500
+        }
+        
+        if query:
+            params['q'] = query
+        if page_token:
+            params['pageToken'] = page_token
+        
+        response = gmail_service.users().drafts().list(**params).execute()
+        
+        drafts = response.get('drafts', [])
+        logger.info(f"Retrieved {len(drafts)} drafts")
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Failed to list drafts: {str(e)}")
+        raise GmailApiError(f"Failed to list drafts: {str(e)}")
+
+@with_rate_limiting
+def get_draft_details(gmail_service, draft_id: str, format: str = 'full') -> Dict[str, Any]:
+    """
+    Get detailed information about a specific draft.
+    
+    Args:
+        gmail_service: Authenticated Gmail API service
+        draft_id: ID of the draft to retrieve
+        format: Format of the draft ('full', 'metadata', 'minimal')
+        
+    Returns:
+        Dict containing detailed draft information
+        
+    Raises:
+        GmailApiError: If API call fails
+    """
+    try:
+        logger.debug(f"Getting details for draft {draft_id}")
+        
+        response = gmail_service.users().drafts().get(
+            userId='me',
+            id=draft_id,
+            format=format
+        ).execute()
+        
+        logger.info(f"Retrieved details for draft {draft_id}")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Failed to get draft details for {draft_id}: {str(e)}")
+        raise GmailApiError(f"Failed to get draft details for {draft_id}: {str(e)}")
+
+@with_rate_limiting
+def delete_draft(gmail_service, draft_id: str) -> Dict[str, Any]:
+    """
+    Delete a draft email.
+    
+    Args:
+        gmail_service: Authenticated Gmail API service
+        draft_id: ID of the draft to delete
+        
+    Returns:
+        Dict containing confirmation of deletion
+        
+    Raises:
+        GmailApiError: If API call fails
+    """
+    try:
+        logger.debug(f"Deleting draft {draft_id}")
+        
+        gmail_service.users().drafts().delete(
+            userId='me',
+            id=draft_id
+        ).execute()
+        
+        logger.info(f"Deleted draft {draft_id}")
+        return {"status": "success", "message": f"Draft {draft_id} deleted successfully"}
+        
+    except Exception as e:
+        logger.error(f"Failed to delete draft {draft_id}: {str(e)}")
+        raise GmailApiError(f"Failed to delete draft {draft_id}: {str(e)}")
+
+
+# Helper Functions for Draft Operations
+def _build_email_message(to_addresses: List[str], subject: str, body: str,
+                        cc: Optional[List[str]] = None, bcc: Optional[List[str]] = None) -> str:
+    """
+    Build a raw email message string for Gmail API.
+    
+    Args:
+        to_addresses: List of recipient email addresses
+        subject: Email subject
+        body: Email body content
+        cc: Optional CC recipients
+        bcc: Optional BCC recipients
+        
+    Returns:
+        Base64-encoded email message string
+    """
+    import email.mime.text
+    import base64
+    
+    # Create the message
+    message = email.mime.text.MIMEText(body)
+    message['To'] = ', '.join(to_addresses)
+    message['Subject'] = subject
+    
+    if cc:
+        message['Cc'] = ', '.join(cc)
+    if bcc:
+        message['Bcc'] = ', '.join(bcc)
+    
+    # Encode the message
+    raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    return raw_message
+
+def _extract_body_from_payload(payload: Dict) -> str:
+    """
+    Extract email body content from Gmail API payload.
+    
+    Args:
+        payload: Gmail API message payload
+        
+    Returns:
+        Email body content as string
+    """
+    body = ""
+    
+    if payload.get('body', {}).get('data'):
+        # Simple text message
+        import base64
+        body = base64.urlsafe_b64decode(payload['body']['data']).decode('utf-8')
+    elif payload.get('parts'):
+        # Multi-part message - look for text/plain part
+        for part in payload['parts']:
+            if part.get('mimeType') == 'text/plain' and part.get('body', {}).get('data'):
+                import base64
+                body = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
+                break
+    
+    return body
+
+
+# Thread Management Functions
+@with_rate_limiting
+def list_threads(gmail_service, query: str = None, max_results: int = 100, 
+                page_token: str = None) -> Dict:
+    """
+    List email threads from Gmail.
+    
+    Args:
+        gmail_service: Authenticated Gmail service instance
+        query: Gmail query string for filtering threads
+        max_results: Maximum number of threads to return (1-500)
+        page_token: Token for pagination
+        
+    Returns:
+        Dict containing threads list and pagination info
+        
+    Raises:
+        GmailApiError: If Gmail API call fails
+    """
+    try:
+        request_params = {
+            'userId': 'me',
+            'maxResults': max_results
+        }
+        
+        if query:
+            request_params['q'] = query
+        if page_token:
+            request_params['pageToken'] = page_token
+            
+        result = gmail_service.users().threads().list(**request_params).execute()
+        
+        return {
+            "success": True,
+            "threads": result.get('threads', []),
+            "next_page_token": result.get('nextPageToken'),
+            "result_size_estimate": result.get('resultSizeEstimate', 0)
+        }
+        
+    except HttpError as e:
+        error_details = e.error_details[0] if e.error_details else {}
         raise GmailApiError(
-            f"API error during batch permanent deletion: {error.resp.status}",
-            original_exception=error,
+            f"Failed to list threads: {error_details.get('message', str(e))}"
         )
     except Exception as e:
-        logger.error(
-            f"Unexpected error during batch permanent deletion: {e}", exc_info=True
-        )
-        raise DamienError(f"Unexpected error during batch permanent deletion: {e}")
+        raise GmailApiError(f"Unexpected error listing threads: {str(e)}")
+
+
+@with_rate_limiting  
+def get_thread_details(gmail_service, thread_id: str, format: str = 'full') -> Dict:
+    """
+    Get complete thread information including all messages.
+    
+    Args:
+        gmail_service: Authenticated Gmail service instance
+        thread_id: Thread ID to retrieve
+        format: Detail level - 'full', 'metadata', or 'minimal'
+        
+    Returns:
+        Dict containing complete thread information
+        
+    Raises:
+        GmailApiError: If Gmail API call fails or thread not found
+    """
+    try:
+        result = gmail_service.users().threads().get(
+            userId='me',
+            id=thread_id,
+            format=format
+        ).execute()
+        
+        return {
+            "success": True,
+            "thread": result,
+            "thread_id": thread_id,
+            "message_count": len(result.get('messages', []))
+        }
+        
+    except HttpError as e:
+        if e.resp.status == 404:
+            raise GmailApiError(f"Thread {thread_id} not found")
+        elif e.resp.status == 403:
+            raise GmailApiError("Insufficient permissions to access thread")
+        else:
+            error_details = e.error_details[0] if e.error_details else {}
+            raise GmailApiError(
+                f"Failed to get thread details: {error_details.get('message', str(e))}"
+            )
+    except Exception as e:
+        raise GmailApiError(f"Unexpected error getting thread details: {str(e)}")
+
+
+@with_rate_limiting
+def modify_thread_labels(gmail_service, thread_id: str, 
+                        add_labels: Optional[List[str]] = None,
+                        remove_labels: Optional[List[str]] = None) -> Dict:
+    """
+    Add or remove labels from an entire thread.
+    
+    Args:
+        gmail_service: Authenticated Gmail service instance
+        thread_id: Thread ID to modify
+        add_labels: List of label names to add
+        remove_labels: List of label names to remove
+        
+    Returns:
+        Dict containing modification result
+        
+    Raises:
+        GmailApiError: If Gmail API call fails
+    """
+    try:
+        # Convert label names to IDs
+        add_label_ids = []
+        remove_label_ids = []
+        
+        if add_labels:
+            for label_name in add_labels:
+                label_id = get_label_id_from_name(gmail_service, label_name)
+                if label_id:
+                    add_label_ids.append(label_id)
+                    
+        if remove_labels:
+            for label_name in remove_labels:
+                label_id = get_label_id_from_name(gmail_service, label_name)
+                if label_id:
+                    remove_label_ids.append(label_id)
+        
+        body = {}
+        if add_label_ids:
+            body['addLabelIds'] = add_label_ids
+        if remove_label_ids:
+            body['removeLabelIds'] = remove_label_ids
+            
+        if not body:
+            return {
+                "success": True,
+                "message": "No valid labels to modify",
+                "thread_id": thread_id
+            }
+        
+        result = gmail_service.users().threads().modify(
+            userId='me',
+            id=thread_id,
+            body=body
+        ).execute()
+        
+        return {
+            "success": True,
+            "thread": result,
+            "thread_id": thread_id,
+            "labels_added": add_labels or [],
+            "labels_removed": remove_labels or []
+        }
+        
+    except HttpError as e:
+        if e.resp.status == 404:
+            raise GmailApiError(f"Thread {thread_id} not found")
+        else:
+            error_details = e.error_details[0] if e.error_details else {}
+            raise GmailApiError(
+                f"Failed to modify thread labels: {error_details.get('message', str(e))}"
+            )
+    except Exception as e:
+        raise GmailApiError(f"Unexpected error modifying thread labels: {str(e)}")
+
+
+@with_rate_limiting
+def trash_thread(gmail_service, thread_id: str) -> Dict:
+    """
+    Move entire thread to trash.
+    
+    Args:
+        gmail_service: Authenticated Gmail service instance
+        thread_id: Thread ID to trash
+        
+    Returns:
+        Dict containing trash operation result
+        
+    Raises:
+        GmailApiError: If Gmail API call fails
+    """
+    try:
+        result = gmail_service.users().threads().trash(
+            userId='me',
+            id=thread_id
+        ).execute()
+        
+        return {
+            "success": True,
+            "thread": result,
+            "thread_id": thread_id,
+            "action": "trashed"
+        }
+        
+    except HttpError as e:
+        if e.resp.status == 404:
+            raise GmailApiError(f"Thread {thread_id} not found")
+        else:
+            error_details = e.error_details[0] if e.error_details else {}
+            raise GmailApiError(
+                f"Failed to trash thread: {error_details.get('message', str(e))}"
+            )
+    except Exception as e:
+        raise GmailApiError(f"Unexpected error trashing thread: {str(e)}")
+
+
+@with_rate_limiting 
+def delete_thread_permanently(gmail_service, thread_id: str) -> Dict:
+    """
+    Permanently delete entire thread (irreversible).
+    
+    Args:
+        gmail_service: Authenticated Gmail service instance
+        thread_id: Thread ID to delete permanently
+        
+    Returns:
+        Dict containing deletion result
+        
+    Raises:
+        GmailApiError: If Gmail API call fails
+    """
+    try:
+        gmail_service.users().threads().delete(
+            userId='me',
+            id=thread_id
+        ).execute()
+        
+        return {
+            "success": True,
+            "thread_id": thread_id,
+            "action": "permanently_deleted",
+            "message": "Thread permanently deleted"
+        }
+        
+    except HttpError as e:
+        if e.resp.status == 404:
+            raise GmailApiError(f"Thread {thread_id} not found")
+        else:
+            error_details = e.error_details[0] if e.error_details else {}
+            raise GmailApiError(
+                f"Failed to delete thread: {error_details.get('message', str(e))}"
+            )
+    except Exception as e:
+        raise GmailApiError(f"Unexpected error deleting thread: {str(e)}")
