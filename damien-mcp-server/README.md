@@ -10,11 +10,28 @@ The Damien MCP Server acts as a bridge between AI assistants and the Damien-CLI 
 
 - **MCP Protocol Support**: Implements the Model Context Protocol for seamless integration with AI assistants
 - **Gmail Management**: Provides tools for listing, trashing, labeling, and managing emails
+- **Draft Management**: Complete draft email lifecycle - create, update, send, list, and delete drafts
+- **Settings Management**: Gmail settings control including vacation responders, IMAP/POP configuration
 - **Optimized Email Fetching**: Supports granular header fetching with `include_headers` parameter for efficient API usage
 - **Rule Management**: Allows creating, listing, and applying Gmail filtering rules
+- **Universal Tool Registry**: Centralized tool registration system for consistent handler management
 - **Session Context**: Maintains conversation context using DynamoDB for multi-turn interactions
 - **Secure Authentication**: Uses existing Damien-CLI token-based authentication with Gmail
 - **Smithery SDK Integration**: Can be integrated with Smithery SDK for enhanced discovery and standardized MCP compliance
+
+### Recent Major Updates (v2.0)
+
+🔧 **Comprehensive Tool System Overhaul** - All MCP tools have been completely refactored with:
+- **Universal Registry Pattern**: Centralized tool registration and handler management
+- **Standardized Context Handling**: All tools now receive proper context parameters
+- **Fixed Authentication Flow**: Resolved Gmail service access issues across all tools
+- **Error Handling Improvements**: Consistent error responses and better debugging information
+
+✅ **All Tools Now Working** (23+ tools total):
+- **Draft Tools (6)**: Create, update, send, list, get details, delete draft emails
+- **Settings Tools (6)**: Vacation responders, IMAP settings, POP settings management
+- **Email Management Tools (6)**: List, get details, trash, label, mark as read/unread, rules
+- **Rules Tools (5)**: List, get details, add, delete, apply filtering rules
 
 ### Performance Optimizations
 
@@ -162,45 +179,70 @@ poetry run uvicorn app.main:app --host 0.0.0.0 --port 8892
 
 ## Available MCP Tools
 
-The following MCP tools are currently implemented:
+The Damien MCP Server provides 23+ fully functional tools across four main categories:
 
-1. **damien_list_emails**
-   - Lists emails from your Gmail account based on query parameters
-   - Parameters:
-     - `query`: Optional Gmail query string (e.g., "is:unread", "from:example.com")
-     - `max_results`: Maximum number of emails to retrieve (default: 10)
-     - `page_token`: Optional token for pagination
-   - Example request:
-     ```json
-     {
-       "tool_name": "damien_list_emails",
-       "input": {
-         "query": "is:unread",
-         "max_results": 5
-       },
-       "session_id": "conversation_123456789"
-     }
-     ```
+### 🔧 Draft Management Tools (6 tools)
+All draft email lifecycle operations are supported:
 
-2. **damien_get_email_details**
-   - Retrieves detailed information about a specific email
-   - Parameters:
-     - `message_id`: ID of the email to retrieve (required)
-     - `format`: Format of the details to retrieve (default: "full")
-   - Example request:
-     ```json
-     {
-       "tool_name": "damien_get_email_details",
-       "input": {
-         "message_id": "1234abcd5678",
-         "format": "full"
-       },
-       "session_id": "conversation_123456789"
-     }
-     ```
+1. **damien_create_draft** - Create new draft emails
+2. **damien_update_draft** - Update existing drafts
+3. **damien_send_draft** - Send draft emails immediately
+4. **damien_list_drafts** - List all draft emails with filtering
+5. **damien_get_draft_details** - Get detailed information about specific drafts
+6. **damien_delete_draft** - Permanently delete draft emails
 
-3. **damien_trash_emails**
-   - Moves specified emails to the trash folder
+### ⚙️ Settings Management Tools (6 tools)
+Complete Gmail settings control:
+
+7. **damien_get_vacation_settings** - Retrieve current vacation responder settings
+8. **damien_update_vacation_settings** - Configure vacation auto-replies
+9. **damien_get_imap_settings** - Get IMAP access configuration
+10. **damien_update_imap_settings** - Modify IMAP settings
+11. **damien_get_pop_settings** - Retrieve POP access settings
+12. **damien_update_pop_settings** - Update POP configuration
+
+### 📧 Email Management Tools (6 tools)
+Core email operations:
+
+13. **damien_list_emails** - List emails with query filtering and pagination
+14. **damien_get_email_details** - Get detailed email information
+15. **damien_trash_emails** - Move emails to trash
+16. **damien_label_emails** - Add/remove labels from emails
+17. **damien_mark_emails** - Mark emails as read/unread
+18. **damien_delete_emails_permanently** - Permanently delete emails (irreversible)
+
+### 📋 Rules Management Tools (5 tools)
+Gmail filtering and automation:
+
+19. **damien_list_rules** - List all filtering rules
+20. **damien_get_rule_details** - Get detailed rule information
+21. **damien_add_rule** - Create new filtering rules
+22. **damien_delete_rule** - Remove existing rules
+23. **damien_apply_rules** - Apply rules to emails with dry-run support
+
+### Tool Features
+- **Universal Context Handling**: All tools receive session context for multi-turn conversations
+- **Standardized Error Responses**: Consistent error handling and informative messages
+- **Robust Parameter Validation**: Comprehensive input validation for all tools
+- **Gmail API Integration**: Direct integration with Gmail API through Damien core
+- **Performance Optimized**: Efficient API usage with minimal overhead
+
+### Example Tool Usage
+
+**Create a Draft Email:**
+```json
+{
+  "tool_name": "damien_create_draft",
+  "input": {
+    "to": ["recipient@example.com"],
+    "subject": "Meeting Follow-up",
+    "body": "Thank you for the productive meeting today..."
+  },
+  "session_id": "conversation_123456789"
+}
+```
+
+**List Recent Emails:**
    - Parameters:
      - `message_ids`: List of email IDs to trash (required)
    - Example request:
@@ -216,36 +258,30 @@ The following MCP tools are currently implemented:
 
 4. **damien_label_emails**
    - Adds or removes labels from specified emails
-   - Parameters:
-     - `message_ids`: List of email IDs to modify (required)
-     - `add_label_names`: List of label names to add
-     - `remove_label_names`: List of label names to remove
-   - Example request:
-     ```json
-     {
-       "tool_name": "damien_label_emails",
-       "input": {
-         "message_ids": ["1234abcd5678"],
-         "add_label_names": ["Important", "Follow-up"],
-         "remove_label_names": ["Pending"]
-       },
-       "session_id": "conversation_123456789"
-     }
-     ```
+```json
+{
+  "tool_name": "damien_list_emails",
+  "input": {
+    "query": "is:unread",
+    "max_results": 5
+  },
+  "session_id": "conversation_123456789"
+}
+```
 
-5. **damien_mark_emails**
-   - Marks emails as read or unread
-   - Parameters:
-     - `message_ids`: List of email IDs to mark (required)
-     - `mark_as`: Either "read" or "unread" (required)
-   - Example request:
-     ```json
-     {
-       "tool_name": "damien_mark_emails",
-       "input": {
-         "message_ids": ["1234abcd5678", "8765dcba4321"],
-         "mark_as": "read"
-       },
+**Apply Email Rules:**
+```json
+{
+  "tool_name": "damien_apply_rules",
+  "input": {
+    "dry_run": true,
+    "gmail_query_filter": "from:newsletter"
+  },
+  "session_id": "conversation_123456789"
+}
+```
+
+For complete tool documentation, see the individual tool files in `app/tools/` directory.
        "session_id": "conversation_123456789"
      }
      ```
