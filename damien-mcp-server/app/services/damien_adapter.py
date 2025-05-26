@@ -206,7 +206,7 @@ class DamienAdapter:
         try:
             g_client = await self._ensure_g_service_client()
             logger.debug(f"Adapter: Trashing {len(message_ids)} emails: {message_ids}")
-            success = damien_gmail_integration_module.batch_trash_messages(service=g_client, message_ids=message_ids)
+            success = self.damien_gmail_integration_module.batch_trash_messages(service=g_client, message_ids=message_ids)
             if success:
                 status_msg = f"Successfully moved {len(message_ids)} email(s) to trash."
                 logger.info(status_msg)
@@ -228,7 +228,7 @@ class DamienAdapter:
         try:
             g_client = await self._ensure_g_service_client()
             logger.debug(f"Adapter: Labeling {len(message_ids)} emails: {message_ids}. Add: {add_label_names}, Remove: {remove_label_names}")
-            success = damien_gmail_integration_module.batch_modify_message_labels(
+            success = self.damien_gmail_integration_module.batch_modify_message_labels(
                 service=g_client, message_ids=message_ids, add_label_names=add_label_names, remove_label_names=remove_label_names
             )
             if success:
