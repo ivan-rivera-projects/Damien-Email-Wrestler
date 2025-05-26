@@ -143,7 +143,7 @@ def list_labels(service):  # Kept for potential debugging, can be removed if unu
 
 
 def list_messages(
-    service, query_string: str = None, max_results: int = 10, page_token: str = None
+    service, query_string: str = None, max_results: int = 10, page_token: str = None, include_headers: list = None
 ):
     if not service:
         click.echo("Damien cannot list messages: Gmail service not available.")
@@ -161,6 +161,42 @@ def list_messages(
 
         messages = results.get("messages", [])
         next_page_token = results.get("nextPageToken")
+
+        # If include_headers is specified, fetch message details and extract headers
+        if include_headers and messages:
+            enriched_messages = []
+            for message in messages:
+                try:
+                    # Get message details to access headers
+                    message_details = service.users().messages().get(
+                        userId='me', 
+                        id=message['id'], 
+                        format='metadata'
+                    ).execute()
+                    
+                    # Start with basic message info
+                    enriched_message = {
+                        'id': message['id'],
+                        'threadId': message['threadId']
+                    }
+                    
+                    # Extract requested headers
+                    headers = message_details.get('payload', {}).get('headers', [])
+                    for header in headers:
+                        if header['name'] in include_headers:
+                            enriched_message[header['name']] = header['value']
+                    
+                    enriched_messages.append(enriched_message)
+                    
+                except Exception as e:
+                    # If we can't get details for a message, include it with error info
+                    enriched_messages.append({
+                        'id': message['id'],
+                        'threadId': message['threadId'],
+                        'error': f"Failed to fetch headers: {str(e)}"
+                    })
+            
+            messages = enriched_messages
 
         # click.echo(f"Damien found {len(messages)} message stubs. Next page token: {next_page_token}")
         return {"messages": messages, "nextPageToken": next_page_token}

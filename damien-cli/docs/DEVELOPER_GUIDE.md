@@ -78,6 +78,21 @@ When testing CLI command functions (e.g., in `features/.../commands.py`) that in
     *   Correct application of `scan_limit`.
     *   Correct aggregation of actions.
 
+## Testing MCP Server Components
+For testing the Damien MCP Server (`../damien-mcp-server/`):
+*   **Handler Function Testing**: Test MCP tool handlers by mocking `DamienAdapter` and `gmail_api_service` functions
+*   **Required Imports**: Always import `MagicMock` explicitly: `from unittest.mock import patch, AsyncMock, MagicMock`
+*   **Async Test Pattern**: Use `@pytest.mark.asyncio` for async handler functions
+*   **Mock Pattern**: Mock service functions directly rather than complex Gmail API chains:
+    ```python
+    with patch("app.tools.settings_tools.gmail_api_service.get_vacation_settings") as mock_get:
+        mock_get.return_value = {"enableAutoReply": True}
+    ```
+*   **Context Testing**: Verify handlers properly use session context and return enhanced results
+*   **Integration Testing**: Use `tools/test_mcp.py` for live server testing (requires running server)
+
+See the [MCP Server Testing Guide](../damien-mcp-server/docs/TESTING_GUIDE.md) for detailed MCP testing instructions.
+
 ## Coding Conventions
 
 * **Formatting:** Black is used for code formatting. Consider setting up your IDE to format with Black on save.

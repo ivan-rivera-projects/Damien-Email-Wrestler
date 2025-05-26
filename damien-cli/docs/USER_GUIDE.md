@@ -246,3 +246,46 @@ Output a JSON summary of a dry run for all rules against all mail:
 ```bash
 poetry run damien rules apply --all-mail --dry-run --output-format json
 ```
+
+## Damien MCP Server Integration
+
+The Damien platform includes an MCP (Model Context Protocol) server that allows AI assistants like Claude to interact with your Gmail account through natural language. The MCP server provides all CLI functionality plus additional features through a conversational interface.
+
+### Available Through MCP Server
+
+#### Gmail Settings Management
+* **Vacation Responder**: Configure out-of-office auto-replies with custom messages, schedules, and restrictions
+* **IMAP Settings**: Enable/disable IMAP access and configure sync settings  
+* **POP Settings**: Manage POP3 access and message handling preferences
+
+#### Enhanced Email Operations
+* **Natural Language Queries**: Use conversational language instead of Gmail search syntax
+* **Batch Processing**: Handle multiple operations efficiently
+* **Session Context**: Maintain conversation state across multiple requests
+
+#### Example MCP Interactions
+```
+User: "Set up an out of office message for next week saying I'm on vacation"
+Assistant: [Uses vacation responder settings to configure auto-reply]
+
+User: "Show me unread emails from my boss about the project"
+Assistant: [Searches emails with appropriate filters]
+
+User: "Create a rule to automatically archive newsletters"
+Assistant: [Creates and applies filtering rule]
+```
+
+### MCP Server Setup
+
+1. **Start the MCP Server** (in addition to CLI setup):
+   ```bash
+   cd ../damien-mcp-server
+   poetry install
+   poetry run uvicorn app.main:app --reload --port 8892
+   ```
+
+2. **Configure AI Assistant**: Connect Claude or other MCP-compatible AI to the server endpoint
+
+3. **Begin Conversational Email Management**: Use natural language to manage your Gmail account
+
+For detailed MCP server documentation, see [MCP Server README](../damien-mcp-server/README.md) and [MCP Tools Reference](../damien-mcp-server/docs/MCP_TOOLS_REFERENCE.md).

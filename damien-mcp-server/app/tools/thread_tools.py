@@ -199,7 +199,7 @@ class DeleteThreadPermanentlyParams(BaseModel):
 
 
 # Handler Functions
-async def list_threads_handler(params: ListThreadsParams, context: Dict[str, Any]) -> Dict[str, Any]:
+async def list_threads_handler(params_dict: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
     List email threads with optional filtering.
     
@@ -207,6 +207,11 @@ async def list_threads_handler(params: ListThreadsParams, context: Dict[str, Any
     Rate limit group: gmail_api_read
     """
     try:
+        # Parse parameters from dict
+        params = ListThreadsParams(**params_dict) if isinstance(params_dict, dict) else params_dict
+        
+        logger.info(f"Processing list_threads with params: {params}")
+        
         damien_adapter = DamienAdapter()
         gmail_service = await damien_adapter.get_gmail_service()
         
@@ -248,7 +253,7 @@ async def list_threads_handler(params: ListThreadsParams, context: Dict[str, Any
         }
 
 
-async def get_thread_details_handler(params: GetThreadDetailsParams, context: Dict[str, Any]) -> Dict[str, Any]:
+async def get_thread_details_handler(params_dict: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
     Get complete details for a specific thread.
     
@@ -256,6 +261,11 @@ async def get_thread_details_handler(params: GetThreadDetailsParams, context: Di
     Rate limit group: gmail_api_read
     """
     try:
+        # Parse parameters from dict
+        params = GetThreadDetailsParams(**params_dict) if isinstance(params_dict, dict) else params_dict
+        
+        logger.info(f"Processing get_thread_details with params: {params}")
+        
         damien_adapter = DamienAdapter()
         gmail_service = await damien_adapter.get_gmail_service()
         
@@ -298,9 +308,14 @@ async def get_thread_details_handler(params: GetThreadDetailsParams, context: Di
 
 
 
-async def modify_thread_labels_handler(params: ModifyThreadLabelsParams, context: Dict[str, Any]) -> Dict[str, Any]:
+async def modify_thread_labels_handler(params_dict: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """Add or remove labels from an entire thread."""
     try:
+        # Parse parameters from dict
+        params = ModifyThreadLabelsParams(**params_dict) if isinstance(params_dict, dict) else params_dict
+        
+        logger.info(f"Processing modify_thread_labels with params: {params}")
+        
         if not params.add_labels and not params.remove_labels:
             return {
                 "success": False,
@@ -354,9 +369,14 @@ async def modify_thread_labels_handler(params: ModifyThreadLabelsParams, context
         }
 
 
-async def trash_thread_handler(params: TrashThreadParams, context: Dict[str, Any]) -> Dict[str, Any]:
+async def trash_thread_handler(params_dict: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """Move an entire thread to trash."""
     try:
+        # Parse parameters from dict
+        params = TrashThreadParams(**params_dict) if isinstance(params_dict, dict) else params_dict
+        
+        logger.info(f"Processing trash_thread with params: {params}")
+        
         damien_adapter = DamienAdapter()
         gmail_service = await damien_adapter.get_gmail_service()
         
@@ -398,9 +418,14 @@ async def trash_thread_handler(params: TrashThreadParams, context: Dict[str, Any
 
 
 
-async def delete_thread_permanently_handler(params: DeleteThreadPermanentlyParams, context: Dict[str, Any]) -> Dict[str, Any]:
+async def delete_thread_permanently_handler(params_dict: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """Permanently delete an entire thread (irreversible)."""
     try:
+        # Parse parameters from dict
+        params = DeleteThreadPermanentlyParams(**params_dict) if isinstance(params_dict, dict) else params_dict
+        
+        logger.info(f"Processing delete_thread_permanently with params: {params}")
+        
         damien_adapter = DamienAdapter()
         gmail_service = await damien_adapter.get_gmail_service()
         
@@ -445,11 +470,7 @@ async def delete_thread_permanently_handler(params: DeleteThreadPermanentlyParam
 # Tool Registration Function
 def register_thread_tools():
     """Register all thread management tools with the tool registry."""
-    print("DEBUG: register_thread_tools() called")  # Debug line
-    logger.info("DEBUG: Starting thread tools registration")  # Debug line
-    
-    print(f"DEBUG: THREAD_TOOLS keys: {list(THREAD_TOOLS.keys())}")  # Debug line
-    print(f"DEBUG: THREAD_TOOLS length: {len(THREAD_TOOLS)}")  # Debug line
+    logger.info("Starting thread tools registration")
     
     handlers = {
         "list_threads_handler": list_threads_handler,
@@ -459,18 +480,15 @@ def register_thread_tools():
         "delete_thread_permanently_handler": delete_thread_permanently_handler
     }
     
-    print(f"DEBUG: handlers keys: {list(handlers.keys())}")  # Debug line
-    
     for tool_name, tool_def in THREAD_TOOLS.items():
-        print(f"DEBUG: Processing tool: {tool_name}, handler: {tool_def.handler_name}")  # Debug line
         try:
             handler = handlers[tool_def.handler_name]
-            print(f"DEBUG: Got handler for {tool_name}: {handler}")  # Debug line
             tool_registry.register_tool(tool_def, handler)
-            print(f"DEBUG: Successfully registered {tool_name}")  # Debug line
-            logger.info(f"DEBUG: Registered thread tool: {tool_name}")  # Debug line
+            logger.info(f"Registered thread tool: {tool_name}")
         except Exception as e:
-            print(f"DEBUG: ERROR registering {tool_name}: {e}")  # Debug line
-            logger.error(f"Failed to register {tool_name}: {e}")  # Debug line
+            logger.error(f"Failed to register {tool_name}: {e}")
     
     logger.info(f"Registered {len(THREAD_TOOLS)} thread tools")
+
+# Register the thread tools when this module is imported
+register_thread_tools()

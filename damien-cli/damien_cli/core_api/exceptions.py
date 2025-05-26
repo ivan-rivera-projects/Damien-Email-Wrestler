@@ -33,3 +33,10 @@ class InvalidParameterError(DamienError):
 
     # Inherits __init__
     pass
+
+
+class SettingsOperationError(DamienError):
+    """Indicates an error during settings operations."""
+
+    # Inherits __init__
+    pass

@@ -358,26 +358,36 @@ async def execute_tool_endpoint(
                     is_error_flag = True
                     error_message = api_response.get("error_message", "Unknown error from damien_delete_emails_permanently tool.")
 
-        # Registry-based Tools (Draft and Settings Tools) - Route to tool registry handlers
+        # Registry-based Tools (Draft, Settings, and Thread Tools) - Route to tool registry handlers
         elif tool_name in ["damien_create_draft", "damien_update_draft", "damien_send_draft", 
                            "damien_list_drafts", "damien_get_draft_details", "damien_delete_draft",
                            "damien_get_vacation_settings", "damien_update_vacation_settings",
                            "damien_get_imap_settings", "damien_update_imap_settings", 
-                           "damien_get_pop_settings", "damien_update_pop_settings"]:
+                           "damien_get_pop_settings", "damien_update_pop_settings",
+                           # Thread tools added here
+                           "damien_list_threads", "damien_get_thread_details",
+                           "damien_modify_thread_labels", "damien_trash_thread",
+                           "damien_delete_thread_permanently"]:
             try:
                 # Import tool registry to get the handler
                 from ..services.tool_registry import tool_registry
+                
+                # Log the registry lookup attempt
+                logger.info(f"Looking up tool '{tool_name}' in registry")
                 
                 # Get the tool definition and handler
                 tool_def = tool_registry.get_tool_definition(tool_name)
                 if not tool_def:
                     is_error_flag = True
                     error_message = f"Tool '{tool_name}' not found in registry"
+                    logger.error(f"Tool '{tool_name}' not found in registry. Available tools: {list(tool_registry.get_all_tools().keys())}")
                 else:
+                    logger.info(f"Found tool definition for '{tool_name}' with handler '{tool_def.handler_name}'")
                     handler_func = tool_registry.get_handler(tool_def.handler_name)
                     if not handler_func:
                         is_error_flag = True
                         error_message = f"Handler for tool '{tool_name}' not found"
+                        logger.error(f"Handler '{tool_def.handler_name}' not found for tool '{tool_name}'")
                     else:
                         # Prepare context for the handler
                         context = {
@@ -387,13 +397,16 @@ async def execute_tool_endpoint(
                             "timestamp": datetime.now(timezone.utc).isoformat()  # Use current timestamp
                         }
                         
+                        logger.info(f"Executing handler for '{tool_name}'")
                         # Execute the handler with the parameters and context
                         api_response = await handler_func(params_dict, context)
                         if api_response.get("success", True):  # Assume success if not specified
                             tool_output_data = api_response
+                            logger.info(f"Successfully executed '{tool_name}'")
                         else:
                             is_error_flag = True
                             error_message = api_response.get("error_message", f"Unknown error from {tool_name} tool.")
+                            logger.error(f"Error executing '{tool_name}': {error_message}")
                             
             except Exception as e:
                 logger.error(f"Error executing registered tool {tool_name}: {e}", exc_info=True)
@@ -600,8 +613,7 @@ async def list_tools_endpoint():
     
     return tools
 
-# Import the settings_tools module to register its tools
+# Import the tool modules to register their tools
 from ..tools import settings_tools
-
-# Import the draft_tools module to register its tools
 from ..tools import draft_tools
+from ..tools import thread_tools

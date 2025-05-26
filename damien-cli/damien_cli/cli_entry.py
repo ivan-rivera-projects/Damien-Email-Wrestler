@@ -8,7 +8,7 @@ from damien_cli.core.logging_setup import setup_logging
 # Service acquisition and error handling will be managed in the login command.
 
 # Import feature command groups
-from damien_cli.features.email_management.commands import emails_group
+from damien_cli.features.email_management.commands import emails
 from damien_cli.features.rule_management.commands import rules_group
 
 
@@ -88,7 +88,7 @@ def damien(ctx, verbose, config_dir):
 
 
 # Register command groups from feature slices
-damien.add_command(emails_group)
+damien.add_command(emails)
 damien.add_command(rules_group)
 
 
