@@ -21,6 +21,7 @@ from damien_cli.core import logging_setup as damien_cli_logging_setup # For CLI 
 # Import Damien core_api components
 from damien_cli.core_api import gmail_api_service as damien_gmail_module
 from damien_cli.core_api import rules_api_service as damien_rules_module
+from damien_cli.integrations import gmail_integration as damien_gmail_integration_module
 from damien_cli.core_api.exceptions import (
     DamienError,
     GmailApiError,
@@ -77,6 +78,7 @@ class DamienAdapter:
         self._g_service_client: Optional[Any] = None # Cached client
         self.damien_gmail_module = damien_gmail_module
         self.damien_rules_module = damien_rules_module
+        self.damien_gmail_integration_module = damien_gmail_integration_module
 
     async def _ensure_g_service_client(self) -> Any:
         """Ensures the Gmail service client is initialized and returns it.
@@ -98,12 +100,8 @@ class DamienAdapter:
         if self._g_service_client is None:
             logger.info("Gmail service client not initialized. Initializing...")
             try:
-                # Use the instance's mocked/actual module
-                client = self.damien_gmail_module.get_g_service_client_from_token(
-                    token_file_path_str=settings.gmail_token_path,
-                    credentials_file_path_str=settings.gmail_credentials_path,
-                    scopes=settings.gmail_scopes
-                )
+                # Use the correct function from Gmail integration
+                client = self.damien_gmail_integration_module.get_gmail_service()
                 if client is None:
                     logger.error("Gmail service client initialization returned None from damien_cli")
                     raise DamienError("Failed to initialize Gmail service client (returned None).")
@@ -116,6 +114,10 @@ class DamienAdapter:
                 logger.error(f"Unexpected error during Gmail client initialization: {e}", exc_info=True)
                 raise DamienError(f"Unexpected error initializing Gmail service: {e}") # Wrap in DamienError
         return self._g_service_client
+
+    async def get_gmail_service(self) -> Any:
+        """Provides the authenticated Gmail service client."""
+        return await self._ensure_g_service_client()
 
     async def list_emails_tool(
         self,
@@ -143,12 +145,12 @@ class DamienAdapter:
                 f"Adapter: list_emails_tool called with query='{query}', max_results={max_results}, "
                 f"page_token='{page_token}', include_headers={include_headers}"
             )
-            result_data = self.damien_gmail_module.list_messages(
-                service=g_client, # Corrected parameter name
+            result_data = self.damien_gmail_integration_module.list_messages(
+                service=g_client,
                 query_string=query,
                 max_results=max_results,
                 page_token=page_token,
-                include_headers=include_headers # Pass new parameter
+                include_headers=include_headers
             )
             # The damien_cli.list_messages will now return richer objects if include_headers was used.
             # If include_headers was None, it returns basic stubs (id, threadId).
@@ -186,11 +188,10 @@ class DamienAdapter:
                 f"Adapter: get_email_details_tool called for ID: {message_id}, "
                 f"format_option: {format_option}, include_headers: {include_headers}"
             )
-            email_data = self.damien_gmail_module.get_message_details(
-                service=g_client, # Corrected parameter name
+            email_data = self.damien_gmail_integration_module.get_message_details(
+                service=g_client,
                 message_id=message_id,
-                email_format=format_option,
-                include_headers=include_headers # Pass new parameter
+                email_format=format_option
             )
             return {"success": True, "data": email_data}
         except (DamienError, GmailApiError, InvalidParameterError) as e:
@@ -205,7 +206,7 @@ class DamienAdapter:
         try:
             g_client = await self._ensure_g_service_client()
             logger.debug(f"Adapter: Trashing {len(message_ids)} emails: {message_ids}")
-            success = self.damien_gmail_module.batch_trash_messages(service=g_client, message_ids=message_ids)
+            success = damien_gmail_integration_module.batch_trash_messages(service=g_client, message_ids=message_ids)
             if success:
                 status_msg = f"Successfully moved {len(message_ids)} email(s) to trash."
                 logger.info(status_msg)
@@ -227,7 +228,7 @@ class DamienAdapter:
         try:
             g_client = await self._ensure_g_service_client()
             logger.debug(f"Adapter: Labeling {len(message_ids)} emails: {message_ids}. Add: {add_label_names}, Remove: {remove_label_names}")
-            success = self.damien_gmail_module.batch_modify_message_labels(
+            success = damien_gmail_integration_module.batch_modify_message_labels(
                 service=g_client, message_ids=message_ids, add_label_names=add_label_names, remove_label_names=remove_label_names
             )
             if success:
@@ -255,7 +256,7 @@ class DamienAdapter:
         try:
             g_client = await self._ensure_g_service_client()
             logger.debug(f"Adapter: Marking {len(message_ids)} emails as {normalized_mark_as}: {message_ids}")
-            success = self.damien_gmail_module.batch_mark_messages(
+            success = damien_gmail_integration_module.batch_mark_messages(
                 service=g_client, message_ids=message_ids, mark_as=normalized_mark_as
             )
             if success:
@@ -404,7 +405,7 @@ class DamienAdapter:
             logger.warning(f"Adapter: PERMANENTLY DELETING {len(message_ids)} emails: {message_ids}. THIS IS IRREVERSIBLE.")
             g_client = await self._ensure_g_service_client()
             # The CLI's batch_delete_permanently function returns a boolean.
-            success = self.damien_gmail_module.batch_delete_permanently(
+            success = damien_gmail_integration_module.batch_delete_permanently(
                 service=g_client,
                 message_ids=message_ids
             )

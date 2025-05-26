@@ -625,3 +625,187 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+ien_delete_emails_permanently` - Permanently delete emails
+
+### Settings Management
+- `damien_get_vacation_settings` - Get vacation responder settings
+- `damien_update_vacation_settings` - Update vacation responder
+- `damien_get_imap_settings` - Get IMAP settings
+- `damien_update_imap_settings` - Update IMAP configuration
+- `damien_get_pop_settings` - Get POP settings
+- `damien_update_pop_settings` - Update POP configuration
+
+### Rule Management
+- `damien_list_rules` - List filtering rules
+- `damien_add_rule` - Create new rules
+- `damien_delete_rule` - Remove rules
+- `damien_apply_rules` - Execute rules on emails
+
+For detailed tool documentation, see [MCP Tools Reference](docs/MCP_TOOLS_REFERENCE.md).
+
+## Architecture
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   AI Assistant  │────│  MCP Protocol    │────│  Damien MCP     │
+│   (Claude)      │    │  (HTTP/JSON)     │    │  Server         │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+                                                        │
+                                               ┌─────────────────┐
+                                               │  Tool Registry  │
+                                               │  & Handlers     │
+                                               └─────────────────┘
+                                                        │
+                              ┌─────────────────────────┼─────────────────────────┐
+                              │                         │                         │
+                    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+                    │  Email Tools    │    │ Settings Tools  │    │  Rule Tools     │
+                    └─────────────────┘    └─────────────────┘    └─────────────────┘
+                              │                         │                         │
+                              └─────────────────────────┼─────────────────────────┘
+                                                        │
+                                               ┌─────────────────┐
+                                               │ Damien Adapter  │
+                                               │ (Gmail API)     │
+                                               └─────────────────┘
+                                                        │
+                                               ┌─────────────────┐
+                                               │   Gmail API     │
+                                               └─────────────────┘
+```
+
+## Development
+
+### Running Tests
+
+```bash
+# Unit tests
+poetry run pytest tests/ -v
+
+# Specific test file
+poetry run pytest test/test_settings_tools.py -v
+
+# Integration tests (requires running server)
+python tools/test_mcp.py
+```
+
+### Adding New Tools
+
+1. **Create handler function** in appropriate `app/tools/` module
+2. **Define tool schema** with input validation
+3. **Register tool** in the tool registry
+4. **Add tests** following established patterns
+
+See [Testing Guide](docs/TESTING_GUIDE.md) for detailed testing instructions.
+
+### Code Style
+
+- **Formatting**: Black
+- **Linting**: Flake8
+- **Type Hints**: Required for all functions
+- **Documentation**: Docstrings for all public functions
+
+```bash
+# Format code
+poetry run black .
+
+# Lint code
+poetry run flake8 app tests
+```
+
+## Integration with AI Assistants
+
+### Claude Integration
+
+The MCP server can be integrated with Claude through the Smithery SDK or direct MCP protocol implementation. See [Smithery Integration Guide](../docs/Smithery_Integration_Guide.md) for details.
+
+### Example Claude Conversation
+
+```
+User: "Show me my unread emails from the last week"
+Claude: [Uses damien_list_emails with query "is:unread newer_than:7d"]
+
+User: "Set up an out of office message for next week"  
+Claude: [Uses damien_update_vacation_settings with appropriate dates]
+
+User: "Create a rule to archive newsletters automatically"
+Claude: [Uses damien_add_rule to create filtering rule]
+```
+
+## Security Considerations
+
+- **API Keys**: Store securely, never commit to version control
+- **Gmail Tokens**: Protect OAuth tokens, implement refresh logic
+- **Rate Limiting**: Built-in rate limiting prevents API abuse
+- **Scope Validation**: Tools validate required Gmail API scopes
+- **Input Validation**: All parameters validated with Pydantic models
+
+## Deployment
+
+### Docker Support
+
+```bash
+# Build image
+docker build -t damien-mcp-server .
+
+# Run container
+docker run -p 8892:8892 \
+  -e DAMIEN_MCP_SERVER_API_KEY=your-key \
+  -v /path/to/credentials:/app/credentials \
+  damien-mcp-server
+```
+
+### Environment Setup
+
+See [Environment Setup Guide](../ENV_SETUP.md) for detailed deployment instructions.
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Authentication Errors**
+   - Verify `token.json` is valid and accessible
+   - Check Gmail API credentials and scopes
+   - Ensure API key matches server configuration
+
+2. **Tool Execution Failures**
+   - Check server logs for detailed error messages
+   - Verify required Gmail API scopes are granted
+   - Test with dry-run mode when available
+
+3. **Performance Issues**
+   - Monitor Gmail API rate limits
+   - Use appropriate batch sizes for bulk operations
+   - Implement proper session management
+
+### Debug Mode
+
+Enable debug logging:
+
+```bash
+DAMIEN_LOG_LEVEL=DEBUG poetry run uvicorn app.main:app --reload
+```
+
+## Contributing
+
+1. **Fork the repository**
+2. **Create feature branch**: `git checkout -b feature/new-tool`
+3. **Add tests** for new functionality
+4. **Update documentation** as needed
+5. **Submit pull request**
+
+See [Developer Guide](../damien-cli/docs/DEVELOPER_GUIDE.md) for detailed contribution guidelines.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
+
+## Related Projects
+
+- **[Damien CLI](../damien-cli/)**: Command-line interface for email management
+- **[Damien Smithery Adapter](../damien-smithery-adapter/)**: Smithery SDK integration
+- **[Model Context Protocol](https://github.com/modelcontextprotocol)**: MCP specification and tools
+
+---
+
+For more information, visit the [Documentation Directory](docs/) or check the [Architecture Overview](../docs/ARCHITECTURE.md).

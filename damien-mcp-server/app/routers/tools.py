@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from typing import Any, Dict, Optional
 import logging
 import json
+from datetime import datetime, timezone
 
 # Import dependencies and services
 from ..core.security import verify_api_key
@@ -16,13 +17,60 @@ from ..dependencies.dependencies_service import get_damien_adapter # Updated pat
 from ..services.damien_adapter import DamienAdapter
 from ..services import dynamodb_service
 from ..core.config import settings
+
+
+def preprocess_list_parameter(param):
+    """
+    Preprocess list parameters that may come as JSON strings from MCP clients.
+    
+    Args:
+        param: Parameter value that might be a JSON string representation of a list
+        
+    Returns:
+        Parsed list if input was a valid JSON string, otherwise returns the original parameter
+    """
+    if param is None:
+        return param
+    if isinstance(param, str):
+        try:
+            parsed_param = json.loads(param)
+            if isinstance(parsed_param, list) and all(isinstance(item, str) for item in parsed_param):
+                return parsed_param
+            else:
+                logger.warning(f"Parameter JSON string did not parse to a list of strings: {parsed_param}")
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse parameter as JSON: {param}")
+    return param
+
+
+def preprocess_mcp_parameters(params_dict):
+    """
+    Preprocess common MCP parameters that are often sent as JSON strings.
+    
+    Args:
+        params_dict: Dictionary of parameters from MCP request
+        
+    Returns:
+        Updated parameters dictionary with parsed list parameters
+    """
+    # List of parameters that are commonly sent as JSON strings by MCP clients
+    list_parameters = [
+        'message_ids', 'add_label_names', 'remove_label_names', 
+        'include_headers', 'rule_ids_to_apply'
+    ]
+    
+    for param_name in list_parameters:
+        if param_name in params_dict:
+            params_dict[param_name] = preprocess_list_parameter(params_dict[param_name])
+    
+    return params_dict
 from ..models.mcp_protocol import ( # Changed from ..models.mcp
     MCPExecuteToolServerRequest,    # Renamed from MCPExecuteToolRequest
     MCPExecuteToolServerResponse    # Renamed from MCPExecuteToolResponse
 )
 from ..models.tools import (
-    ListEmailsParams, ListEmailsOutput,
-    GetEmailDetailsParams, GetEmailDetailsOutput,
+    ListDraftsParams, ListEmailsOutput,
+    GetDraftDetailsParams, GetEmailDetailsOutput,
     TrashEmailsParams, TrashEmailsOutput,
     LabelEmailsParams, LabelEmailsOutput,
     MarkEmailsParams, MarkEmailsOutput,
@@ -95,10 +143,30 @@ async def execute_tool_endpoint(
         - Session context is maintained in DynamoDB for multi-turn conversations
         - All requests to Gmail API are made through the Damien core_api layer
     """
+    # Apply tool usage policy
+    from ..core.tool_usage_config import get_tool_usage_config, ToolUsagePolicy
+    config = get_tool_usage_config()
+    
+    # Log API endpoint usage warning
+    if config.warn_on_api_usage:
+        logger.warning(f"API endpoint used instead of direct MCP tool call for {request_body.tool_name}")
+    
+    # Check if we're enforcing direct MCP only
+    if config.policy == ToolUsagePolicy.DIRECT_MCP_ONLY:
+        return MCPExecuteToolServerResponse(
+            tool_result_id="policy_enforcement",
+            is_error=True,
+            error_message=f"Direct MCP tools required. Please use '{request_body.tool_name}' tool directly instead of API endpoint.",
+            output=None
+        )
+        
     tool_name = request_body.tool_name
     params_dict = request_body.input # Correctly using input for tool parameters
     session_id = request_body.session_id
     # user_id from request_body.user_id can be used if needed, else SERVER_USER_ID
+
+    # Preprocess parameters to handle JSON string lists from MCP clients
+    params_dict = preprocess_mcp_parameters(params_dict)
 
     # Debug logging to see exactly what we're receiving
     logger.info(f"=== DEBUGGING PARAMETERS ===")
@@ -142,7 +210,7 @@ async def execute_tool_endpoint(
     try:
         if tool_name == "damien_list_emails":
             try:
-                list_emails_params = ListEmailsParams(**params_dict)
+                list_emails_params = ListDraftsParams(**params_dict)
             except ValidationError as e:
                 is_error_flag = True; error_message = f"Invalid parameters for {tool_name}: {e.errors()}"
             if not is_error_flag:
@@ -162,7 +230,7 @@ async def execute_tool_endpoint(
         
         elif tool_name == "damien_get_email_details":
             try:
-                get_details_params = GetEmailDetailsParams(**params_dict)
+                get_details_params = GetDraftDetailsParams(**params_dict)
             except ValidationError as e:
                 is_error_flag = True; error_message = f"Invalid parameters for {tool_name}: {e.errors()}"
             if not is_error_flag:
@@ -290,6 +358,48 @@ async def execute_tool_endpoint(
                     is_error_flag = True
                     error_message = api_response.get("error_message", "Unknown error from damien_delete_emails_permanently tool.")
 
+        # Registry-based Tools (Draft and Settings Tools) - Route to tool registry handlers
+        elif tool_name in ["damien_create_draft", "damien_update_draft", "damien_send_draft", 
+                           "damien_list_drafts", "damien_get_draft_details", "damien_delete_draft",
+                           "damien_get_vacation_settings", "damien_update_vacation_settings",
+                           "damien_get_imap_settings", "damien_update_imap_settings", 
+                           "damien_get_pop_settings", "damien_update_pop_settings"]:
+            try:
+                # Import tool registry to get the handler
+                from ..services.tool_registry import tool_registry
+                
+                # Get the tool definition and handler
+                tool_def = tool_registry.get_tool_definition(tool_name)
+                if not tool_def:
+                    is_error_flag = True
+                    error_message = f"Tool '{tool_name}' not found in registry"
+                else:
+                    handler_func = tool_registry.get_handler(tool_def.handler_name)
+                    if not handler_func:
+                        is_error_flag = True
+                        error_message = f"Handler for tool '{tool_name}' not found"
+                    else:
+                        # Prepare context for the handler
+                        context = {
+                            "session_id": session_id,
+                            "user_id": user_id,
+                            "tool_name": tool_name,
+                            "timestamp": datetime.now(timezone.utc).isoformat()  # Use current timestamp
+                        }
+                        
+                        # Execute the handler with the parameters and context
+                        api_response = await handler_func(params_dict, context)
+                        if api_response.get("success", True):  # Assume success if not specified
+                            tool_output_data = api_response
+                        else:
+                            is_error_flag = True
+                            error_message = api_response.get("error_message", f"Unknown error from {tool_name} tool.")
+                            
+            except Exception as e:
+                logger.error(f"Error executing registered tool {tool_name}: {e}", exc_info=True)
+                is_error_flag = True
+                error_message = f"Error executing {tool_name}: {str(e)}"
+
         else:
             is_error_flag = True
             error_message = f"Unknown tool_name: {tool_name}"
@@ -306,6 +416,25 @@ async def execute_tool_endpoint(
         output=tool_output_data,
         error_message=error_message
     )
+    
+    # Add tool usage policy headers to encourage direct MCP tool usage
+    from ..core.tool_usage_config import get_tool_usage_config
+    config = get_tool_usage_config()
+    
+    # We need to set headers in FastAPI's response object
+    # This requires using a response_model_exclude_none=True parameter in the router decorator
+    # But we can also add a note in the response for AI engines to see
+    if not is_error_flag and config.warn_on_api_usage:
+        if tool_output_data is None:
+            tool_output_data = {}
+        
+        if isinstance(tool_output_data, dict):
+            tool_output_data["_api_usage_guidance"] = {
+                "message": config.direct_tool_message,
+                "recommendation": f"Use '{tool_name}' tool directly for optimal performance",
+                "policy": config.policy
+            }
+            mcp_response.output = tool_output_data
     
     # Try to save context (should not prevent returning the tool response)
     try:
@@ -382,17 +511,32 @@ async def list_tools_endpoint():
     Returns:
         list: A list of tool definitions containing name, description, and input schema
     """
-    tools = [
+    # Import tool registry to get dynamically registered tools
+    from ..services.tool_registry import tool_registry
+    
+    tools = []
+    
+    # First, add all registry-based tools (draft tools, settings tools)
+    all_registered_tools = tool_registry.get_all_tools()
+    for tool_name, tool_def in all_registered_tools.items():
+        tools.append({
+            "name": tool_def.name,
+            "description": tool_def.description,
+            "input_schema": tool_def.input_schema,
+        })
+    
+    # Then, add the hardcoded email/rules tools that have handlers but aren't registered
+    hardcoded_tools = [
         {
             "name": "damien_list_emails",
             "description": "Lists email messages based on a query, with support for pagination. Provides summaries including ID, thread ID, subject, sender, snippet, date, attachment status, and labels.",
-            "input_schema": ListEmailsParams.model_json_schema(),
+            "input_schema": ListDraftsParams.model_json_schema(),
             "output_schema": ListEmailsOutput.model_json_schema()
         },
         {
             "name": "damien_get_email_details",
             "description": "Retrieves the full details of a specific email message, including headers, payload (body, parts), and raw content based on the specified format.",
-            "input_schema": GetEmailDetailsParams.model_json_schema(),
+            "input_schema": GetDraftDetailsParams.model_json_schema(),
             "output_schema": GetEmailDetailsOutput.model_json_schema()
         },
         {
@@ -429,7 +573,7 @@ async def list_tools_endpoint():
             "name": "damien_get_rule_details",
             "description": "Retrieves the full definition of a specific filtering rule by its ID or name.",
             "input_schema": GetRuleDetailsParams.model_json_schema(),
-            "output_schema": RuleModelOutput.model_json_schema() # RuleModelOutput is the full definition
+            "output_schema": RuleModelOutput.model_json_schema()
         },
         {
             "name": "damien_add_rule",
@@ -450,4 +594,14 @@ async def list_tools_endpoint():
             "output_schema": DeleteEmailsPermanentlyOutput.model_json_schema()
         }
     ]
+    
+    # Add hardcoded tools to the list
+    tools.extend(hardcoded_tools)
+    
     return tools
+
+# Import the settings_tools module to register its tools
+from ..tools import settings_tools
+
+# Import the draft_tools module to register its tools
+from ..tools import draft_tools
