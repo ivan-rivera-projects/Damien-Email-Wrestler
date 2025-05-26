@@ -11,7 +11,7 @@ import requests
 
 # Configuration
 BASE_URL = "http://localhost:8892"  # Change this to your ngrok URL if testing remotely
-API_KEY = "FiVz_QjpHbfffIktJOip_HKByZhqWTvDlDRv0kFbGKw"
+API_KEY = "7e508adf3ccf8b9376c312df8cebd488f3988f310afbdf5077d5d3ce63ed7c8f"
 HEADERS = {
     "X-API-Key": API_KEY,
     "Content-Type": "application/json"
@@ -24,7 +24,7 @@ def test_health():
     print(f"Health endpoint: {response.status_code}")
     print(response.json())
     print()
-    return response.status_code == 200
+    assert response.status_code == 200
 
 def test_protected():
     """Test the protected endpoint."""
@@ -33,7 +33,7 @@ def test_protected():
     print(f"Protected endpoint: {response.status_code}")
     print(response.json())
     print()
-    return response.status_code == 200
+    assert response.status_code == 200
 
 def test_gmail():
     """Test the Gmail connection."""
@@ -42,7 +42,7 @@ def test_gmail():
     print(f"Gmail test endpoint: {response.status_code}")
     print(response.json())
     print()
-    return response.status_code == 200
+    assert response.status_code == 200
 
 def test_list_emails():
     """Test the list_emails tool."""
@@ -81,7 +81,7 @@ def test_list_emails():
         print(f"Error: {response.text}")
     
     print()
-    return response.status_code == 200
+    assert response.status_code == 200
 
 def main():
     """Run all tests."""
@@ -89,21 +89,43 @@ def main():
     print(f"Base URL: {BASE_URL}")
     print()
     
-    # Run tests
-    health_ok = test_health()
-    protected_ok = test_protected()
-    gmail_ok = test_gmail()
-    list_emails_ok = test_list_emails()
+    # Run tests with try/except to catch assertion errors
+    tests_passed = 0
+    total_tests = 4
+    
+    try:
+        test_health()
+        print("Health endpoint: ✅ PASS")
+        tests_passed += 1
+    except AssertionError:
+        print("Health endpoint: ❌ FAIL")
+    
+    try:
+        test_protected()
+        print("Protected endpoint: ✅ PASS")
+        tests_passed += 1
+    except AssertionError:
+        print("Protected endpoint: ❌ FAIL")
+    
+    try:
+        test_gmail()
+        print("Gmail connection: ✅ PASS")
+        tests_passed += 1
+    except AssertionError:
+        print("Gmail connection: ❌ FAIL")
+    
+    try:
+        test_list_emails()
+        print("List emails tool: ✅ PASS")
+        tests_passed += 1
+    except AssertionError:
+        print("List emails tool: ❌ FAIL")
     
     # Summary
-    print("=== Test Summary ===")
-    print(f"Health endpoint: {'✅ PASS' if health_ok else '❌ FAIL'}")
-    print(f"Protected endpoint: {'✅ PASS' if protected_ok else '❌ FAIL'}")
-    print(f"Gmail connection: {'✅ PASS' if gmail_ok else '❌ FAIL'}")
-    print(f"List emails tool: {'✅ PASS' if list_emails_ok else '❌ FAIL'}")
+    print(f"\n=== Test Summary: {tests_passed}/{total_tests} passed ===")
     
     # Final result
-    if all([health_ok, protected_ok, gmail_ok, list_emails_ok]):
+    if tests_passed == total_tests:
         print("\n✅ All tests passed! The server is ready for Claude integration.")
         return 0
     else:

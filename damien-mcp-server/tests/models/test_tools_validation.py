@@ -5,10 +5,10 @@ import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../app")))
 
-from models.tools import ListEmailsParams, GetEmailDetailsParams
+from app.models.tools import ListDraftsParams, GetDraftDetailsParams # Changed GetEmailDetailsParams
 
 def test_list_emails_params_include_headers_valid_list():
-    params = ListEmailsParams(
+    params = ListDraftsParams( # Changed ListEmailsParams
         query="is:unread",
         max_results=10,
         include_headers=["From", "Subject"]
@@ -16,7 +16,7 @@ def test_list_emails_params_include_headers_valid_list():
     assert params.include_headers == ["From", "Subject"]
 
 def test_list_emails_params_include_headers_stringified_json():
-    params = ListEmailsParams(
+    params = ListDraftsParams(
         query="is:unread",
         max_results=10,
         include_headers='["From", "Subject"]'
@@ -25,7 +25,7 @@ def test_list_emails_params_include_headers_stringified_json():
 
 def test_list_emails_params_include_headers_invalid_string():
     with pytest.raises(ValidationError) as exc_info:
-        ListEmailsParams(
+        ListDraftsParams(
             query="is:unread",
             max_results=10,
             include_headers='invalid string'
@@ -33,14 +33,14 @@ def test_list_emails_params_include_headers_invalid_string():
     assert "include_headers parsing error" in str(exc_info.value)
 
 def test_get_email_details_params_include_headers_valid_list():
-    params = GetEmailDetailsParams(
+    params = GetDraftDetailsParams(
         message_id="12345",
         include_headers=["From", "Date"]
     )
     assert params.include_headers == ["From", "Date"]
 
 def test_get_email_details_params_include_headers_stringified_json():
-    params = GetEmailDetailsParams(
+    params = GetDraftDetailsParams(
         message_id="12345",
         include_headers='["From", "Date"]'
     )
@@ -48,7 +48,7 @@ def test_get_email_details_params_include_headers_stringified_json():
 
 def test_get_email_details_params_include_headers_invalid_string():
     with pytest.raises(ValidationError) as exc_info:
-        GetEmailDetailsParams(
+        GetDraftDetailsParams(
             message_id="12345",
             include_headers='not a json array'
         )

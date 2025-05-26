@@ -3,8 +3,8 @@
 import pytest
 from pydantic import ValidationError
 from app.models.tools import (
-    ListEmailsParams,
-    GetEmailDetailsParams,
+    ListDraftsParams,
+    GetDraftDetailsParams, # Changed from GetDraftDetailsParams
     TrashEmailsParams,
     LabelEmailsParams,
     MarkEmailsParams,
@@ -16,41 +16,41 @@ from app.models.tools import (
 
 
 def test_list_emails_params():
-    """Test ListEmailsParams model."""
+    """Test ListDraftsParams model."""
     # Default values
-    params = ListEmailsParams()
+    params = ListDraftsParams()
     assert params.query is None
     assert params.max_results == 10
     assert params.page_token is None
     
     # Custom values
-    params = ListEmailsParams(query="is:unread", max_results=20, page_token="next_page")
+    params = ListDraftsParams(query="is:unread", max_results=20, page_token="next_page")
     assert params.query == "is:unread"
     assert params.max_results == 20
     assert params.page_token == "next_page"
     
     # Validation: max_results must be > 0
     with pytest.raises(ValidationError):
-        ListEmailsParams(max_results=0)
+        ListDraftsParams(max_results=0)
     
     # Validation: max_results must be <= 100
     with pytest.raises(ValidationError):
-        ListEmailsParams(max_results=101)
+        ListDraftsParams(max_results=101)
 
 
 def test_get_email_details_params():
-    """Test GetEmailDetailsParams model."""
+    """Test GetDraftDetailsParams model."""
     # Required field
     with pytest.raises(ValidationError):
-        GetEmailDetailsParams()  # message_id is required
+        GetDraftDetailsParams()  # message_id is required
     
     # Default format
-    params = GetEmailDetailsParams(message_id="test_id")
+    params = GetDraftDetailsParams(message_id="test_id")
     assert params.message_id == "test_id"
     assert params.format == "full"
     
     # Custom format
-    params = GetEmailDetailsParams(message_id="test_id", format="metadata")
+    params = GetDraftDetailsParams(message_id="test_id", format="metadata")
     assert params.format == "metadata"
 
 

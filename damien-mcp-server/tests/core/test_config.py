@@ -4,6 +4,7 @@ import os
 import pytest
 from pathlib import Path
 from unittest.mock import patch, mock_open
+import contextlib
 import importlib 
 
 # Import the module to test
@@ -58,8 +59,7 @@ def test_settings_from_env(monkeypatch):
     
     # Patch load_dotenv within the config module to prevent it from loading a real .env file
     # Patch Path.exists for file validation in Settings
-    with patch('app.core.config.load_dotenv') as mock_load_dotenv, \
-         patch.object(Path, 'exists', return_value=True):
+    with patch.object(Path, 'exists', return_value=True):
 
         # Import the Settings class directly for local instantiation AFTER patching environment
         from app.core.config import Settings as SettingsClassForTest
@@ -90,8 +90,7 @@ def test_path_validation_warning(monkeypatch): # Added monkeypatch
     # Ensure paths don't exist for this test
     # Patch load_dotenv to prevent interference
     with patch.object(Path, 'exists', return_value=False), \
-         patch('builtins.print') as mock_print, \
-         patch('app.core.config.load_dotenv'): # Patch load_dotenv in config
+         patch('builtins.print') as mock_print:
 
         # Import and instantiate locally
         from app.core.config import Settings as SettingsClassForTestValidation
@@ -113,8 +112,7 @@ def test_dynamodb_settings(monkeypatch): # Added monkeypatch
     monkeypatch.setenv("DAMIEN_DYNAMODB_SESSION_TABLE_NAME", "CustomTableDynamo")
     monkeypatch.setenv("DAMIEN_DYNAMODB_REGION", "eu-west-1-dynamo")
 
-    with patch.object(Path, 'exists', return_value=True), \
-         patch('app.core.config.load_dotenv'):
+    with patch.object(Path, 'exists', return_value=True):
 
         from app.core.config import Settings as SettingsClassForDynamoTest
         settings_instance = SettingsClassForDynamoTest()

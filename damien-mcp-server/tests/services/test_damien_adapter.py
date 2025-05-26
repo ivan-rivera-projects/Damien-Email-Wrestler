@@ -93,10 +93,11 @@ async def test_list_emails_tool(adapter, mock_gmail_module):
     result = await adapter.list_emails_tool()
     
     mock_gmail_module.list_messages.assert_called_once_with(
-        adapter._ensure_g_service_client.return_value,
+        service=adapter._ensure_g_service_client.return_value,
         query_string=None,
         max_results=10,
-        page_token=None
+        page_token=None,
+        include_headers=None
     )
     assert result["success"] is True
     assert "email_summaries" in result["data"]
@@ -109,10 +110,11 @@ async def test_list_emails_tool(adapter, mock_gmail_module):
     )
     
     mock_gmail_module.list_messages.assert_called_once_with(
-        adapter._ensure_g_service_client.return_value,
+        service=adapter._ensure_g_service_client.return_value,
         query_string="is:unread",
         max_results=20,
-        page_token="token456"
+        page_token="token456",
+        include_headers=None # Assuming default call in adapter passes None
     )
     
     # Test error handling
@@ -131,9 +133,10 @@ async def test_get_email_details_tool(adapter, mock_gmail_module):
     result = await adapter.get_email_details_tool(message_id="msg_id_123")
     
     mock_gmail_module.get_message_details.assert_called_once_with(
-        adapter._ensure_g_service_client.return_value,
+        service=adapter._ensure_g_service_client.return_value,
         message_id="msg_id_123",
-        email_format="full"
+        email_format="metadata",
+        include_headers=None
     )
     assert result["success"] is True
     assert result["data"]["id"] == "msg1"
@@ -143,9 +146,10 @@ async def test_get_email_details_tool(adapter, mock_gmail_module):
     await adapter.get_email_details_tool(message_id="msg_id_123", format_option="metadata")
     
     mock_gmail_module.get_message_details.assert_called_once_with(
-        adapter._ensure_g_service_client.return_value,
+        service=adapter._ensure_g_service_client.return_value,
         message_id="msg_id_123",
-        email_format="metadata"
+        email_format="metadata",
+        include_headers=None # Assuming default call in adapter passes None
     )
     
     # Test error handling
