@@ -179,7 +179,7 @@ poetry run uvicorn app.main:app --host 0.0.0.0 --port 8892
 
 ## Available MCP Tools
 
-The Damien MCP Server provides 23+ fully functional tools across four main categories:
+The Damien MCP Server provides 28+ fully functional tools across five main categories:
 
 ### 🔧 Draft Management Tools (6 tools)
 All draft email lifecycle operations are supported:
@@ -191,34 +191,43 @@ All draft email lifecycle operations are supported:
 5. **damien_get_draft_details** - Get detailed information about specific drafts
 6. **damien_delete_draft** - Permanently delete draft emails
 
+### 🧵 Thread Management Tools (5 tools)
+Complete email thread/conversation management:
+
+7. **damien_list_threads** - List email threads with filtering and pagination
+8. **damien_get_thread_details** - Get complete thread information with all messages
+9. **damien_modify_thread_labels** - Add or remove labels from entire threads
+10. **damien_trash_thread** - Move entire threads to trash (reversible)
+11. **damien_delete_thread_permanently** - Permanently delete entire threads
+
 ### ⚙️ Settings Management Tools (6 tools)
 Complete Gmail settings control:
 
-7. **damien_get_vacation_settings** - Retrieve current vacation responder settings
-8. **damien_update_vacation_settings** - Configure vacation auto-replies
-9. **damien_get_imap_settings** - Get IMAP access configuration
-10. **damien_update_imap_settings** - Modify IMAP settings
-11. **damien_get_pop_settings** - Retrieve POP access settings
-12. **damien_update_pop_settings** - Update POP configuration
+12. **damien_get_vacation_settings** - Retrieve current vacation responder settings
+13. **damien_update_vacation_settings** - Configure vacation auto-replies
+14. **damien_get_imap_settings** - Get IMAP access configuration
+15. **damien_update_imap_settings** - Modify IMAP settings
+16. **damien_get_pop_settings** - Retrieve POP access settings
+17. **damien_update_pop_settings** - Update POP configuration
 
 ### 📧 Email Management Tools (6 tools)
 Core email operations:
 
-13. **damien_list_emails** - List emails with query filtering and pagination
-14. **damien_get_email_details** - Get detailed email information
-15. **damien_trash_emails** - Move emails to trash
-16. **damien_label_emails** - Add/remove labels from emails
-17. **damien_mark_emails** - Mark emails as read/unread
-18. **damien_delete_emails_permanently** - Permanently delete emails (irreversible)
+18. **damien_list_emails** - List emails with query filtering and pagination
+19. **damien_get_email_details** - Get detailed email information
+20. **damien_trash_emails** - Move emails to trash
+21. **damien_label_emails** - Add/remove labels from emails
+22. **damien_mark_emails** - Mark emails as read/unread
+23. **damien_delete_emails_permanently** - Permanently delete emails (irreversible)
 
 ### 📋 Rules Management Tools (5 tools)
 Gmail filtering and automation:
 
-19. **damien_list_rules** - List all filtering rules
-20. **damien_get_rule_details** - Get detailed rule information
-21. **damien_add_rule** - Create new filtering rules
-22. **damien_delete_rule** - Remove existing rules
-23. **damien_apply_rules** - Apply rules to emails with dry-run support
+24. **damien_list_rules** - List all filtering rules
+25. **damien_get_rule_details** - Get detailed rule information
+26. **damien_add_rule** - Create new filtering rules
+27. **damien_delete_rule** - Remove existing rules
+28. **damien_apply_rules** - Apply rules to emails with dry-run support
 
 ### Tool Features
 - **Universal Context Handling**: All tools receive session context for multi-turn conversations
@@ -227,7 +236,7 @@ Gmail filtering and automation:
 - **Gmail API Integration**: Direct integration with Gmail API through Damien core
 - **Performance Optimized**: Efficient API usage with minimal overhead
 
-### Example Tool Usage
+### Example Tool Usage### Example Tool Usage
 
 **Create a Draft Email:**
 ```json
@@ -243,27 +252,48 @@ Gmail filtering and automation:
 ```
 
 **List Recent Emails:**
-   - Parameters:
-     - `message_ids`: List of email IDs to trash (required)
-   - Example request:
-     ```json
-     {
-       "tool_name": "damien_trash_emails",
-       "input": {
-         "message_ids": ["1234abcd5678", "8765dcba4321"]
-       },
-       "session_id": "conversation_123456789"
-     }
-     ```
-
-4. **damien_label_emails**
-   - Adds or removes labels from specified emails
 ```json
 {
   "tool_name": "damien_list_emails",
   "input": {
     "query": "is:unread",
     "max_results": 5
+  },
+  "session_id": "conversation_123456789"
+}
+```
+
+**List Email Threads:**
+```json
+{
+  "tool_name": "damien_list_threads",
+  "input": {
+    "query": "subject:project",
+    "max_results": 10
+  },
+  "session_id": "conversation_123456789"
+}
+```
+
+**Get Complete Thread Details:**
+```json
+{
+  "tool_name": "damien_get_thread_details",
+  "input": {
+    "thread_id": "194bd65e470d1f51",
+    "format": "full"
+  },
+  "session_id": "conversation_123456789"
+}
+```
+
+**Add Labels to Entire Thread:**
+```json
+{
+  "tool_name": "damien_modify_thread_labels",
+  "input": {
+    "thread_id": "194bd65e470d1f51",
+    "add_labels": ["Project", "Important"]
   },
   "session_id": "conversation_123456789"
 }

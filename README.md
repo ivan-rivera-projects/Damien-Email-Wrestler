@@ -6,13 +6,14 @@
 
 Damien Email Wrestler is a comprehensive email management solution that enables AI assistants like Claude to interact with your Gmail account through advanced filtering, organization, and automation capabilities. Built with the Model Context Protocol (MCP) and integrated with the Smithery ecosystem.
 
-## ✨ Recent v2.0 Major Update
+## ✨ Recent v2.1 Thread Operations Update
 
-🔧 **Complete Tool System Overhaul** - All 23+ MCP tools are now fully functional:
-- **Draft Management**: Create, update, send, and manage email drafts
-- **Settings Control**: Configure vacation responders, IMAP/POP settings
-- **Email Operations**: List, trash, label, mark, and permanently delete emails
-- **Rules Management**: Create, apply, and manage Gmail filtering rules
+🧵 **Complete Thread Management System** - Added 5 new thread operation tools:
+- **Thread Listing**: Find and filter email conversations with Gmail queries
+- **Thread Details**: Get complete conversation history with all messages
+- **Thread Labels**: Add/remove labels from entire conversations
+- **Thread Management**: Trash or permanently delete entire conversations
+- **Total Tools**: Now **28 tools** (previously 23) for comprehensive Gmail management
 
 ✅ **Universal Tool Registry** - Implemented centralized tool management system
 ✅ **Enhanced Authentication** - Resolved Gmail API access issues across all tools
