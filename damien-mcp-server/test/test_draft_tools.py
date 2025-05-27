@@ -3,13 +3,12 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from app.tools import draft_tools
 
 @pytest.mark.asyncio
-@patch("app.tools.draft_tools.DamienAdapter")
-async def test_create_draft_handler(mock_damien_adapter_class):
+@patch("damien_cli.integrations.gmail_integration.get_gmail_service")
+async def test_create_draft_handler(mock_get_gmail_service_original_location):
     mock_gmail_service = AsyncMock()
-    mock_adapter_instance = mock_damien_adapter_class.return_value
-    mock_adapter_instance.get_gmail_service = AsyncMock(return_value=mock_gmail_service)
-    
-    # Mock the gmail_api_service function
+    mock_get_gmail_service_original_location.return_value = mock_gmail_service
+
+    # Mock the gmail_api_service.create_draft function
     with patch("app.tools.draft_tools.gmail_api_service.create_draft") as mock_create_draft:
         mock_create_draft.return_value = {
             "id": "draft_123",
@@ -27,13 +26,13 @@ async def test_create_draft_handler(mock_damien_adapter_class):
         
         result = await draft_tools.create_draft_handler(params, context)
         
-        assert result["id"] == "draft_123"
-        assert "created_at" in result
-        assert "recipients" in result
-        assert result["recipients"]["to"] == ["test@example.com"]
-        assert result["recipients"]["cc"] == ["cc@example.com"]
-        assert result["recipients"]["bcc"] == ["bcc@example.com"]
-        assert "user_context" in result
+        assert result["data"]["id"] == "draft_123"
+        assert "created_at" in result["data"]
+        assert "recipients" in result["data"]
+        assert result["data"]["recipients"]["to"] == ["test@example.com"]
+        assert result["data"]["recipients"]["cc"] == ["cc@example.com"]
+        assert result["data"]["recipients"]["bcc"] == ["bcc@example.com"]
+        assert "user_context" in result["data"]
         
         mock_create_draft.assert_called_once_with(
             gmail_service=mock_gmail_service,
@@ -46,13 +45,12 @@ async def test_create_draft_handler(mock_damien_adapter_class):
         )
 
 @pytest.mark.asyncio
-@patch("app.tools.draft_tools.DamienAdapter")
-async def test_create_draft_handler_minimal_params(mock_damien_adapter_class):
+@patch("damien_cli.integrations.gmail_integration.get_gmail_service")
+async def test_create_draft_handler_minimal_params(mock_get_gmail_service_original_location):
     """Test creating draft with only required parameters."""
     mock_gmail_service = AsyncMock()
-    mock_adapter_instance = mock_damien_adapter_class.return_value
-    mock_adapter_instance.get_gmail_service = AsyncMock(return_value=mock_gmail_service)
-    
+    mock_get_gmail_service_original_location.return_value = mock_gmail_service
+
     with patch("app.tools.draft_tools.gmail_api_service.create_draft") as mock_create_draft:
         mock_create_draft.return_value = {"id": "draft_123"}
         
@@ -65,9 +63,9 @@ async def test_create_draft_handler_minimal_params(mock_damien_adapter_class):
         
         result = await draft_tools.create_draft_handler(params, context)
         
-        assert result["id"] == "draft_123"
-        assert result["recipients"]["cc"] == []
-        assert result["recipients"]["bcc"] == []
+        assert result["data"]["id"] == "draft_123"
+        assert result["data"]["recipients"]["cc"] == []
+        assert result["data"]["recipients"]["bcc"] == []
         mock_create_draft.assert_called_once_with(
             gmail_service=mock_gmail_service,
             to_addresses=["test@example.com"],

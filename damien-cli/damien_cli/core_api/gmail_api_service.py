@@ -1,9 +1,676 @@
 from .rate_limiter import with_rate_limiting
-from .exceptions import SettingsOperationError
+from .exceptions import SettingsOperationError, GmailApiError, InvalidParameterError, DamienError
 from typing import Dict, Any, Optional, List
 import logging
+import os
+import json
+import base64
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 
 logger = logging.getLogger(__name__)
+
+# Global label cache
+_label_name_to_id_cache = {}
+
+# Gmail API Scopes
+GMAIL_SCOPES = [
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/gmail.compose',
+    'https://www.googleapis.com/auth/gmail.settings.basic',
+    'https://www.googleapis.com/auth/gmail.settings.sharing'
+]
+
+# Authentication Functions
+def get_authenticated_service(token_path: str = None, credentials_path: str = None, scopes: List[str] = None):
+    """
+    Get authenticated Gmail service client.
+    
+    Args:
+        token_path: Path to token.json file
+        credentials_path: Path to credentials.json file  
+        scopes: List of OAuth scopes
+        
+    Returns:
+        Authenticated Gmail service client
+        
+    Raises:
+        GmailApiError: If authentication fails
+    """
+    try:
+        from damien_cli.core import config as app_config
+        
+        if scopes is None:
+            scopes = app_config.SCOPES
+        if token_path is None:
+            token_path = str(app_config.TOKEN_FILE)
+        if credentials_path is None:
+            credentials_path = str(app_config.CREDENTIALS_FILE)
+            
+        creds = None
+        
+        # Load existing token if available
+        if token_path and os.path.exists(token_path):
+            creds = Credentials.from_authorized_user_file(token_path, scopes)
+        
+        # If there are no (valid) credentials available, let the user log in
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                if not credentials_path or not os.path.exists(credentials_path):
+                    raise GmailApiError(f"Credentials file not found at {credentials_path}")
+                    
+                flow = InstalledAppFlow.from_client_secrets_file(credentials_path, scopes)
+                creds = flow.run_local_server(port=0)
+            
+            # Save the credentials for the next run
+            if token_path:
+                with open(token_path, 'w') as token:
+                    token.write(creds.to_json())
+        
+        service = build('gmail', 'v1', credentials=creds)
+        return service
+        
+    except Exception as e:
+        logger.error(f"Failed to authenticate Gmail service: {str(e)}")
+        raise GmailApiError(f"Failed to authenticate Gmail service: {str(e)}")
+
+
+def get_g_service_client_from_token(token_path: str = None, credentials_path: str = None, scopes: List[str] = None):
+    """
+    Get Gmail service client from existing token (non-interactive).
+    
+    Args:
+        token_path: Path to token.json file
+        credentials_path: Path to credentials.json file
+        scopes: List of OAuth scopes
+        
+    Returns:
+        Authenticated Gmail service client
+        
+    Raises:
+        GmailApiError: If authentication fails or token is invalid
+    """
+    try:
+        from damien_cli.core import config as app_config
+        
+        if scopes is None:
+            scopes = app_config.SCOPES
+        if token_path is None:
+            token_path = str(app_config.TOKEN_FILE)
+        if credentials_path is None:
+            credentials_path = str(app_config.CREDENTIALS_FILE)
+            
+        if not os.path.exists(token_path):
+            raise GmailApiError(f"Token file not found at {token_path}")
+            
+        creds = Credentials.from_authorized_user_file(token_path, scopes)
+        
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                try:
+                    creds.refresh(Request())
+                    # Save refreshed token
+                    with open(token_path, 'w') as token:
+                        token.write(creds.to_json())
+                except Exception as e:
+                    raise GmailApiError(f"Failed to refresh token: {str(e)}")
+            else:
+                raise GmailApiError("Token is invalid and cannot be refreshed non-interactively")
+        
+        service = build('gmail', 'v1', credentials=creds)
+        return service
+        
+    except Exception as e:
+        logger.error(f"Failed to get Gmail service from token: {str(e)}")
+        raise GmailApiError(f"Failed to get Gmail service from token: {str(e)}")
+
+
+# Label Management Functions
+@with_rate_limiting
+def _populate_label_cache(gmail_service):
+    """
+    Populate the label name to ID cache.
+    
+    Args:
+        gmail_service: Authenticated Gmail service client
+        
+    Raises:
+        GmailApiError: If API call fails
+    """
+    global _label_name_to_id_cache
+    
+    try:
+        logger.debug("Populating label cache")
+        
+        results = gmail_service.users().labels().list(userId='me').execute()
+        labels = results.get('labels', [])
+        
+        _label_name_to_id_cache.clear()
+        for label in labels:
+            # Store label names in lowercase for consistent, case-insensitive lookup
+            _label_name_to_id_cache[label['name'].lower()] = label['id']
+            # Also store the ID itself as a key, so get_label_id can pass through IDs
+            _label_name_to_id_cache[label['id']] = label['id']
+            
+        logger.info(f"Populated label cache with {len(_label_name_to_id_cache)} entries (name->id and id->id)")
+        
+    except Exception as e:
+        logger.error(f"Failed to populate label cache: {str(e)}")
+        raise GmailApiError(f"Failed to populate label cache: {str(e)}")
+
+
+def get_label_id(gmail_service, label_name: str) -> Optional[str]:
+    """
+    Get label ID from label name.
+    
+    Args:
+        gmail_service: Authenticated Gmail service client
+        label_name: Name of the label
+        
+    Returns:
+        Label ID if found, None otherwise
+        
+    Raises:
+        GmailApiError: If API call fails
+    """
+    global _label_name_to_id_cache
+    
+    # System labels have their names as IDs (usually uppercase)
+    system_labels = ["INBOX", "SPAM", "TRASH", "UNREAD", "IMPORTANT", "STARRED", "SENT", "DRAFT",
+                     "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS", "CATEGORY_UPDATES", "CATEGORY_FORUMS"]
+    
+    # Check if it's a system label (case-insensitive)
+    for system_label in system_labels:
+        if label_name.upper() == system_label:
+            return system_label
+    
+    # Cache stores names as lowercase and IDs as themselves.
+    # First, try direct lookup (could be an ID or already lowercased name)
+    if label_name in _label_name_to_id_cache:
+        return _label_name_to_id_cache[label_name]
+
+    # Try lowercase version of the input name
+    lower_label_name = label_name.lower()
+    if lower_label_name in _label_name_to_id_cache:
+        return _label_name_to_id_cache[lower_label_name]
+    
+    # If cache is empty or label not found, populate/refresh and try again
+    # The first call to _populate_label_cache will happen if cache is empty.
+    # The second call (after this block) acts as a refresh if still not found.
+    if not _label_name_to_id_cache:
+        logger.debug(f"Label cache empty, populating for '{label_name}'")
+        _populate_label_cache(gmail_service)
+        # Check again after initial population
+        if lower_label_name in _label_name_to_id_cache:
+            return _label_name_to_id_cache[lower_label_name]
+        if label_name in _label_name_to_id_cache: # Check original name if it was an ID
+            return _label_name_to_id_cache[label_name]
+
+    # If still not found, perform a forced refresh and final check
+    logger.debug(f"Label '{label_name}' not found in cache, forcing refresh.")
+    _populate_label_cache(gmail_service) # This is the second call if not found initially
+    
+    if lower_label_name in _label_name_to_id_cache:
+        return _label_name_to_id_cache[lower_label_name]
+    if label_name in _label_name_to_id_cache: # Check original name if it was an ID
+            return _label_name_to_id_cache[label_name]
+            
+    logger.warning(f"Label '{label_name}' not found even after cache refresh.")
+    return None
+
+def get_label_name_from_id(gmail_service, label_id: str) -> Optional[str]:
+    """
+    Get label name from label ID using the cache.
+    This is primarily for user display or logging; most API calls use IDs.
+
+    Args:
+        gmail_service: Authenticated Gmail service client (used to populate cache if needed)
+        label_id: ID of the label
+
+    Returns:
+        Label name if found, None otherwise
+    """
+    global _label_name_to_id_cache
+
+    # System labels are often their own names/IDs
+    system_labels = ["INBOX", "SPAM", "TRASH", "UNREAD", "IMPORTANT", "STARRED", "SENT", "DRAFT",
+                     "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS", "CATEGORY_UPDATES", "CATEGORY_FORUMS"]
+    if label_id.upper() in system_labels:
+        return label_id.upper()
+
+    # Check cache: Iterate through cache items to find the name for the given ID
+    # The cache stores {name.lower(): id} and {id: id}. We need to find a key (name) whose value is label_id.
+    
+    # First pass: check if the label_id itself is a key that maps to itself (from id->id storage)
+    # and then try to find a name that maps to this ID. This is a bit convoluted due to current cache structure.
+    # A better cache might be {id: {"name": "Actual Name", "lower_name": "actual name"}}
+
+    # Attempt to find a name that maps to this ID
+    for name_key, id_val in _label_name_to_id_cache.items():
+        if id_val == label_id and name_key != label_id: # Ensure we are getting a name, not the ID itself as key
+            # We stored names as lowercase, but we don't have the original case here.
+            # This is a limitation. For now, returning the lowercase name found as key.
+            # Ideally, _populate_label_cache would store original names too.
+            # For now, we can't reliably get the original casing from just the ID if it's not a system label.
+            # Let's try to find the original name by re-populating and checking. This is inefficient.
+            
+            # A simpler approach for now: if ID is in cache values, we can't directly get its original name
+            # unless the ID itself was also stored as a name (which it isn't for user labels).
+            # The current get_label_id stores name.lower() -> id and id -> id.
+            # So, if label_id is a value, we need to find the key that is name.lower().
+            
+            # Let's try to find a key that is not an ID itself but whose value is the label_id
+            if name_key != id_val: # This means name_key is a lowercase name
+                 # This is imperfect as it returns the lowercase name.
+                 # To get the original cased name, the cache structure would need to be {id: name} or similar.
+                 # Given current cache, this is the best we can do without fetching all labels again.
+                 # Let's assume for now that if an ID is passed, and it's a user label,
+                 # we might not have its original casing easily from this cache structure.
+                 # The test data implies we might just need to return the ID if not a system label.
+                 pass # Fall through to populate and re-check
+
+    # Populate cache if empty or if we couldn't find it (hoping it appears)
+    if not _label_name_to_id_cache or label_id not in _label_name_to_id_cache.values():
+        _populate_label_cache(gmail_service)
+
+    # Second attempt after populating/refreshing
+    for name_key, id_val in _label_name_to_id_cache.items():
+        if id_val == label_id and name_key != label_id: # name_key is lowercased name
+            # Attempt to find the original cased name if possible (this is hard with current cache)
+            # For now, returning the key which is lowercased.
+            # This function might need a redesign or the cache needs to store original names.
+            # A direct lookup `_label_id_to_name_cache` would be better.
+            # Given the existing cache, we can only reliably return the ID itself if it's not a system label.
+            # The tests seem to imply that if a label ID is given, and it's not a system label,
+            # returning the ID itself is acceptable if the name isn't readily available.
+            # Let's refine: if label_id is in _label_name_to_id_cache, it means it was stored as id->id.
+            # We need to find the *other* key (the name) that maps to this label_id.
+            
+            # Search for the name that corresponds to this ID
+            for potential_name, stored_id in _label_name_to_id_cache.items():
+                if stored_id == label_id and potential_name != label_id: # Found the name mapping
+                    # This potential_name is lowercase. We don't have original case.
+                    return potential_name # Return the lowercase name
+    
+    # If after all attempts, we can't find a name, return the ID itself as a fallback
+    # This matches behavior where get_label_id returns the ID if it's passed in.
+    logger.warning(f"Could not resolve a distinct name for label ID '{label_id}' from cache. Returning ID.")
+    return label_id
+
+def get_label_id_from_name(gmail_service, label_name: str) -> Optional[str]:
+    """Alias for get_label_id for backward compatibility."""
+    return get_label_id(gmail_service, label_name)
+
+
+# Message Management Functions
+@with_rate_limiting  
+def list_messages(gmail_service, query_string: str = None, max_results: int = 100, 
+                 page_token: str = None) -> Dict[str, Any]:
+    """
+    List Gmail messages based on query.
+    
+    Args:
+        gmail_service: Authenticated Gmail service client
+        query_string: Gmail query string for filtering
+        max_results: Maximum number of messages to return
+        page_token: Token for pagination
+        
+    Returns:
+        Dict containing messages list and pagination info (Gmail API format)
+        
+    Raises:
+        GmailApiError: If API call fails
+        InvalidParameterError: If parameters are invalid
+    """
+    if not gmail_service:
+        raise InvalidParameterError("Gmail service client is required")
+
+    try:
+        request_params = {
+            'userId': 'me',
+            'maxResults': min(max_results, 500)  # Gmail API max is 500
+        }
+        
+        if query_string:
+            request_params['q'] = query_string
+        if page_token:
+            request_params['pageToken'] = page_token
+            
+        logger.debug(f"Listing messages with params: {request_params}")
+        
+        result = gmail_service.users().messages().list(**request_params).execute()
+        
+        messages = result.get('messages', [])
+        logger.info(f"Retrieved {len(messages)} messages")
+        
+        # Return Gmail API format for consistency with tests
+        return result
+        
+    except HttpError as e:
+        logger.error(
+            f"HttpError in list_messages: type(e)={type(e)}, "
+            f"e.resp.status={e.resp.status if e.resp else 'N/A'}, "
+            f"e.error_details={e.error_details!r}, type(e.error_details)={type(e.error_details)}, "
+            f"e.content={e.content!r}, str(e)={str(e)}"
+        )
+        # Original line that might be problematic:
+        error_detail_obj = e.error_details[0] if isinstance(e.error_details, list) and e.error_details else (e.error_details if isinstance(e.error_details, dict) else {})
+        
+        message_from_details = None
+        if isinstance(error_detail_obj, dict):
+            message_from_details = error_detail_obj.get('message')
+
+        final_message_str = message_from_details or str(e)
+        raise GmailApiError(f"Failed to list messages: {final_message_str}", original_exception=e)
+    except Exception as e:
+        logger.error(f"Unexpected exception in list_messages: type(e)={type(e)}, str(e)={str(e)}")
+        raise GmailApiError(f"Unexpected error listing messages: {str(e)}", original_exception=e)
+
+
+@with_rate_limiting
+def get_message_details(gmail_service, message_id: str, format: str = 'full') -> Dict[str, Any]:
+    """
+    Get detailed information about a specific message.
+    
+    Args:
+        gmail_service: Authenticated Gmail service client
+        message_id: ID of the message to retrieve
+        format: Format of the message ('full', 'metadata', 'minimal', 'raw')
+        
+    Returns:
+        Dict containing detailed message information
+        
+    Raises:
+        GmailApiError: If API call fails or message not found
+    """
+    try:
+        logger.debug(f"Getting details for message {message_id}")
+        
+        result = gmail_service.users().messages().get(
+            userId='me',
+            id=message_id,
+            format=format
+        ).execute()
+        
+        logger.info(f"Retrieved details for message {message_id}")
+        return result
+        
+    except HttpError as e:
+        if e.resp.status == 404:
+            raise GmailApiError(f"Message {message_id} not found")
+        else:
+            error_details = e.error_details[0] if e.error_details else {}
+            raise GmailApiError(f"Failed to get message details: {error_details.get('message', str(e))}")
+    except Exception as e:
+        raise GmailApiError(f"Unexpected error getting message details: {str(e)}")
+
+
+# Batch Operations
+@with_rate_limiting
+def batch_modify_message_labels(gmail_service, message_ids: List[str], 
+                               add_label_names: List[str] = None,
+                               remove_label_names: List[str] = None) -> Dict[str, Any]:
+    """
+    Batch modify labels on multiple messages.
+    
+    Args:
+        gmail_service: Authenticated Gmail service client
+        message_ids: List of message IDs to modify
+        add_label_names: List of label names to add
+        remove_label_names: List of label names to remove
+        
+    Returns:
+        Dict containing operation results
+        
+    Raises:
+        GmailApiError: If API call fails
+        InvalidParameterError: If parameters are invalid
+    """
+    if not gmail_service:
+        raise InvalidParameterError("Gmail service client is required")
+
+    try:
+        if not message_ids:
+            return {"success": True, "message": "No messages to modify", "modified_count": 0}
+        
+        # Convert label names to IDs
+        add_label_ids = []
+        remove_label_ids = []
+        
+        if add_label_names:
+            for label_name in add_label_names:
+                label_id = get_label_id(gmail_service, label_name)
+                if label_id:
+                    add_label_ids.append(label_id)
+                    
+        if remove_label_names:
+            for label_name in remove_label_names:
+                label_id = get_label_id(gmail_service, label_name) 
+                if label_id:
+                    remove_label_ids.append(label_id)
+        
+        if not add_label_ids and not remove_label_ids:
+            return {"success": True, "message": "No valid labels to modify", "modified_count": 0}
+        
+        # Build batch modify request
+        body = {'ids': message_ids}
+        if add_label_ids:
+            body['addLabelIds'] = add_label_ids
+        if remove_label_ids:
+            body['removeLabelIds'] = remove_label_ids
+            
+        logger.debug(f"Batch modifying labels on {len(message_ids)} messages")
+        
+        gmail_service.users().messages().batchModify(
+            userId='me',
+            body=body
+        ).execute()
+        
+        logger.info(f"Successfully modified labels on {len(message_ids)} messages")
+        
+        return {
+            "success": True,
+            "modified_count": len(message_ids),
+            "message": f"Successfully modified labels on {len(message_ids)} messages"
+        }
+        
+    except HttpError as e:
+        logger.error(
+            f"HttpError in batch_modify_message_labels: type(e)={type(e)}, "
+            f"e.resp.status={e.resp.status if e.resp else 'N/A'}, "
+            f"e.error_details={e.error_details!r}, type(e.error_details)={type(e.error_details)}, "
+            f"e.content={e.content!r}, str(e)={str(e)}"
+        )
+        error_detail_obj = e.error_details[0] if isinstance(e.error_details, list) and e.error_details else (e.error_details if isinstance(e.error_details, dict) else {})
+        message_from_details = None
+        if isinstance(error_detail_obj, dict):
+            message_from_details = error_detail_obj.get('message')
+        final_message_str = message_from_details or str(e)
+        raise GmailApiError(f"Failed to batch modify message labels: {final_message_str}", original_exception=e)
+    except Exception as e:
+        logger.error(f"Unexpected exception in batch_modify_message_labels: type(e)={type(e)}, str(e)={str(e)}")
+        raise GmailApiError(f"Unexpected error in batch modify labels: {str(e)}", original_exception=e)
+
+
+@with_rate_limiting
+def batch_trash_messages(gmail_service, message_ids: List[str]) -> Dict[str, Any]:
+    """
+    Batch move messages to trash.
+    
+    Args:
+        gmail_service: Authenticated Gmail service client
+        message_ids: List of message IDs to trash
+        
+    Returns:
+        Dict containing operation results
+        
+    Raises:
+        GmailApiError: If API call fails
+    """
+    try:
+        if not message_ids:
+            return {"success": True, "message": "No messages to trash", "trashed_count": 0}
+        
+        logger.debug(f"Batch trashing {len(message_ids)} messages")
+        
+        gmail_service.users().messages().batchModify(
+            userId='me',
+            body={
+                'ids': message_ids,
+                'addLabelIds': ['TRASH']
+            }
+        ).execute()
+        
+        logger.info(f"Successfully trashed {len(message_ids)} messages")
+        
+        return {
+            "success": True,
+            "trashed_count": len(message_ids),
+            "message": f"Successfully trashed {len(message_ids)} messages"
+        }
+        
+    except HttpError as e:
+        error_details = e.error_details[0] if e.error_details else {}
+        raise GmailApiError(f"Failed to batch trash messages: {error_details.get('message', str(e))}")
+    except Exception as e:
+        raise GmailApiError(f"Unexpected error in batch trash: {str(e)}")
+
+
+@with_rate_limiting
+def batch_mark_messages(gmail_service, message_ids: List[str], action: str) -> Dict[str, Any]:
+    """
+    Batch mark messages as read or unread.
+    
+    Args:
+        gmail_service: Authenticated Gmail service client
+        message_ids: List of message IDs to mark
+        action: 'read' or 'unread'
+        
+    Returns:
+        Dict containing operation results
+        
+    Raises:
+        GmailApiError: If API call fails
+        InvalidParameterError: If action is invalid
+    """
+    # Initial parameter validations (outside the main try block for API calls)
+    if not gmail_service:
+        raise InvalidParameterError("Gmail service client is required")
+    if action not in ['read', 'unread']:
+        raise InvalidParameterError(f"Invalid action '{action}'. Must be 'read' or 'unread'")
+            
+    if not message_ids:
+        return {"success": True, "message": f"No messages to mark as {action}", "marked_count": 0, "action": action}
+        
+    try:
+        logger.debug(f"Batch marking {len(message_ids)} messages as {action}")
+        
+        if action == 'read':
+            # Remove UNREAD label
+            body = {
+                'ids': message_ids,
+                'removeLabelIds': ['UNREAD']
+            }
+        else:  # unread
+            # Add UNREAD label
+            body = {
+                'ids': message_ids,
+                'addLabelIds': ['UNREAD']
+            }
+        
+        gmail_service.users().messages().batchModify(
+            userId='me',
+            body=body
+        ).execute()
+        
+        logger.info(f"Successfully marked {len(message_ids)} messages as {action}")
+        
+        return {
+            "success": True,
+            "marked_count": len(message_ids),
+            "action": action,
+            "message": f"Successfully marked {len(message_ids)} messages as {action}"
+        }
+        
+    except HttpError as e:
+        logger.error(
+            f"HttpError in batch_mark_messages: type(e)={type(e)}, "
+            f"e.resp.status={e.resp.status if e.resp else 'N/A'}, "
+            f"e.error_details={e.error_details!r}, type(e.error_details)={type(e.error_details)}, "
+            f"e.content={e.content!r}, str(e)={str(e)}"
+        )
+        error_detail_obj = e.error_details[0] if isinstance(e.error_details, list) and e.error_details else (e.error_details if isinstance(e.error_details, dict) else {})
+        message_from_details = None
+        if isinstance(error_detail_obj, dict):
+            message_from_details = error_detail_obj.get('message')
+        final_message_str = message_from_details or str(e)
+        raise GmailApiError(f"Failed to batch mark messages: {final_message_str}", original_exception=e)
+    except Exception as e:
+        logger.error(f"Unexpected exception in batch_mark_messages: type(e)={type(e)}, str(e)={str(e)}")
+        raise GmailApiError(f"Unexpected error in batch mark: {str(e)}", original_exception=e)
+
+
+@with_rate_limiting
+def batch_delete_permanently(gmail_service, message_ids: List[str]) -> Dict[str, Any]:
+    """
+    Batch permanently delete messages (irreversible).
+    
+    Args:
+        gmail_service: Authenticated Gmail service client
+        message_ids: List of message IDs to delete permanently
+        
+    Returns:
+        Dict containing operation results
+        
+    Raises:
+        GmailApiError: If API call fails
+    """
+    # Initial parameter validations
+    if not gmail_service:
+        raise InvalidParameterError("Gmail service client is required")
+
+    if not message_ids:
+        return {"success": True, "message": "No messages to delete", "deleted_count": 0}
+        
+    try:
+        logger.debug(f"Batch permanently deleting {len(message_ids)} messages")
+        
+        gmail_service.users().messages().batchDelete(
+            userId='me',
+            body={'ids': message_ids}
+        ).execute()
+        
+        logger.info(f"Successfully deleted {len(message_ids)} messages permanently")
+        
+        return {
+            "success": True,
+            "deleted_count": len(message_ids),
+            "message": f"Successfully deleted {len(message_ids)} messages permanently"
+        }
+        
+    except HttpError as e:
+        logger.error(
+            f"HttpError in batch_delete_permanently: type(e)={type(e)}, "
+            f"e.resp.status={e.resp.status if e.resp else 'N/A'}, "
+            f"e.error_details={e.error_details!r}, type(e.error_details)={type(e.error_details)}, "
+            f"e.content={e.content!r}, str(e)={str(e)}"
+        )
+        error_detail_obj = e.error_details[0] if isinstance(e.error_details, list) and e.error_details else (e.error_details if isinstance(e.error_details, dict) else {})
+        message_from_details = None
+        if isinstance(error_detail_obj, dict):
+            message_from_details = error_detail_obj.get('message')
+        final_message_str = message_from_details or str(e)
+        raise GmailApiError(f"Failed to batch delete messages: {final_message_str}", original_exception=e)
+    except Exception as e:
+        logger.error(f"Unexpected exception in batch_delete_permanently: type(e)={type(e)}, str(e)={str(e)}")
+        raise GmailApiError(f"Unexpected error in batch delete: {str(e)}", original_exception=e)
+
 
 # Vacation Responder Functions
 @with_rate_limiting

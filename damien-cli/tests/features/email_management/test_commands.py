@@ -62,13 +62,14 @@ def test_emails_list_human_output(
 ):
     mock_api_list_messages.return_value = MOCK_MESSAGE_STUBS_PAGE1
 
-    def side_effect_get_details(service_client, msg_id, email_format):
+    # Parameter name in mock should match how it's called by SUT or use **kwargs
+    def side_effect_get_details(gmail_service, message_id, format): # Changed params to match SUT call
         assert (
-            service_client == mock_gmail_service_in_context
+            gmail_service == mock_gmail_service_in_context
         )  # Ensure correct service passed
-        if msg_id == "111":
+        if message_id == "111":
             return MOCK_MESSAGE_DETAIL_111
-        if msg_id == "222":
+        if message_id == "222": # Corrected variable name from msg_id to message_id
             return (
                 MOCK_MESSAGE_DETAIL_111  # Using same detail for simplicity for stub 2
             )
@@ -89,7 +90,7 @@ def test_emails_list_human_output(
         result.exit_code == 0
     ), f"CLI exited with {result.exit_code}, output: {result.output}"
     mock_api_list_messages.assert_called_once_with(
-        mock_gmail_service_in_context,
+        gmail_service=mock_gmail_service_in_context, # Changed to keyword argument
         query_string=None,
         max_results=10,
         page_token=None,
@@ -110,10 +111,11 @@ def test_emails_list_json_output(
 ):
     mock_api_list_messages.return_value = MOCK_MESSAGE_STUBS_PAGE1
 
-    def side_effect_get_details(service_client, msg_id, email_format):
-        if msg_id == "111":
+    # Parameter name in mock should match how it's called by SUT or use **kwargs
+    def side_effect_get_details(gmail_service, message_id, format): # Changed params to match SUT call
+        if message_id == "111":
             return MOCK_MESSAGE_DETAIL_111
-        if msg_id == "222":
+        if message_id == "222":
             return (
                 MOCK_MESSAGE_DETAIL_111  # Using same detail for simplicity for stub 2
             )
@@ -187,7 +189,7 @@ def test_emails_get_human_output(
         result.exit_code == 0
     ), f"CLI exited with {result.exit_code}, output: {result.output}"
     mock_api_get_details.assert_called_once_with(
-        mock_gmail_service_in_context, "111", email_format="full"
+        gmail_service=mock_gmail_service_in_context, message_id="111", format="full"
     )
     assert "Details for Email ID: 111" in result.output
 
@@ -312,7 +314,7 @@ def test_emails_trash_cmd_confirmed_interactively( # Renamed for clarity
         yes_flag=False # Explicitly False as --yes was not used
     )
     mock_api_batch_trash.assert_called_once_with(
-        mock_gmail_service_in_context, ["id1", "id2"]
+        gmail_service=mock_gmail_service_in_context, message_ids=["id1", "id2"]
     )
     assert "Successfully moved 2 email(s) to Trash." in result.output
 
@@ -381,7 +383,7 @@ def test_emails_trash_cmd_with_yes_flag(
         yes_flag=True # Crucial: assert it was called with yes_flag=True
     )
     mock_api_batch_trash.assert_called_once_with(
-        mock_gmail_service_in_context, ["id1", "id2"]
+        gmail_service=mock_gmail_service_in_context, message_ids=["id1", "id2"]
     )
     assert "Confirmation bypassed by --yes flag for: Are you sure you want to move these 2 email(s) to Trash?" in result.output
     assert "Successfully moved 2 email(s) to Trash." in result.output
@@ -429,7 +431,7 @@ def test_emails_delete_cmd_confirmed_interactively( # Renamed
     )
     mock_click_prompt.assert_called_once() # YESIDO prompt
     mock_api_batch_delete.assert_called_once_with(
-        mock_gmail_service_in_context, ["id_perm_del"]
+        gmail_service=mock_gmail_service_in_context, message_ids=["id_perm_del"]
     )
     assert "Successfully PERMANENTLY DELETED 1 email(s)." in result.output
 
@@ -516,7 +518,7 @@ def test_emails_delete_cmd_with_yes_flag(
     mock_click_prompt.assert_not_called() # YESIDO prompt should be skipped
 
     mock_api_batch_delete.assert_called_once_with(
-        mock_gmail_service_in_context, ["id_perm_del"]
+        gmail_service=mock_gmail_service_in_context, message_ids=["id_perm_del"]
     )
     assert "Successfully PERMANENTLY DELETED 1 email(s)." in result.output
     # Check if the generic bypass message (from the mock's return_value) is present.
@@ -527,14 +529,17 @@ def test_emails_delete_cmd_with_yes_flag(
 
 
 # Tests for 'damien emails label'
+@patch("damien_cli.features.email_management.commands._confirm_action") # Patch _confirm_action
 @patch("damien_cli.core_api.gmail_api_service.batch_modify_message_labels")
 def test_emails_label_cmd_add_label(
     mock_api_batch_modify,
+    mock_confirm_action, # Add mock to parameters
     runner,
     mock_gmail_service_in_context,
     mock_logging_setup_for_cli_tests,
 ):
-    # mock_api_batch_modify.return_value = True # API returns None on success
+    mock_confirm_action.return_value = (True, "User confirmed.") # Simulate user confirmation
+    # mock_api_batch_modify.return_value = {"success": True, "modified_count": 1} # API returns a dict
 
     result = runner.invoke(
         cli_entry.damien,
@@ -549,23 +554,26 @@ def test_emails_label_cmd_add_label(
         result.exit_code == 0
     ), f"CLI exited with {result.exit_code}, output: {result.output}"
     mock_api_batch_modify.assert_called_once_with(
-        mock_gmail_service_in_context,
-        ["id1"],
+        gmail_service=mock_gmail_service_in_context,
+        message_ids=["id1"],
         add_label_names=["NewLabel", "TRASH"],
-        remove_label_names=[],  # Explicitly check for empty list if that's the default
+        remove_label_names=None  # The command passes None if not provided
     )
     assert "Successfully applied label changes" in result.output
 
 
 # Tests for 'damien emails mark'
+@patch("damien_cli.features.email_management.commands._confirm_action") # Patch _confirm_action
 @patch("damien_cli.core_api.gmail_api_service.batch_mark_messages")
 def test_emails_mark_cmd_read(
     mock_api_batch_mark,
+    mock_confirm_action, # Add mock to parameters
     runner,
     mock_gmail_service_in_context,
     mock_logging_setup_for_cli_tests,
 ):
-    # mock_api_batch_mark.return_value = True # API returns None or raises
+    mock_confirm_action.return_value = (True, "User confirmed.") # Simulate user confirmation
+    # mock_api_batch_mark.return_value = {"success": True, "marked_count": 2}
 
     result = runner.invoke(
         cli_entry.damien,
@@ -580,7 +588,7 @@ def test_emails_mark_cmd_read(
         result.exit_code == 0
     ), f"CLI exited with {result.exit_code}, output: {result.output}"
     mock_api_batch_mark.assert_called_once_with(
-        mock_gmail_service_in_context, ["id1", "id2"], mark_as="read"
+        gmail_service=mock_gmail_service_in_context, message_ids=["id1", "id2"], action="read"
     )
     assert "Successfully marked 2 email(s) as read." in result.output
 
@@ -613,7 +621,7 @@ def test_emails_trash_cmd_api_error(
         result.exit_code == 1
     ), f"CLI exited with {result.exit_code}, output: {result.output}"
     mock_api_batch_trash.assert_called_once_with(
-        mock_gmail_service_in_context, ["id1", "id2"]
+        gmail_service=mock_gmail_service_in_context, message_ids=["id1", "id2"]
     )
     assert "Error during 'damien emails trash': API error trashing" in result.output
 
@@ -643,5 +651,5 @@ def test_emails_trash_cmd_invalid_param_error_from_api(
         result.exit_code == 1
     ), f"CLI exited with {result.exit_code}, output: {result.output}"
     assert (
-        "Error during 'damien emails trash': Invalid ID from API" in result.output
+        "Unexpected error during 'damien emails trash': Invalid ID from API" in result.output
     )  # Check for the specific message from the exception

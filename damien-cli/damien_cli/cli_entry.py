@@ -51,13 +51,11 @@ def damien(ctx, verbose, config_dir):
     # Attempt to non-interactively load gmail_service if not already set (e.g., by tests)
     if "gmail_service" not in ctx.obj:
         try:
-            from damien_cli.core_api.gmail_api_service import (
-                get_authenticated_service,
-                DamienError,
-            )
+            from damien_cli.core_api.gmail_api_service import get_g_service_client_from_token
+            from damien_cli.core_api.exceptions import DamienError
 
-            # Try to get service non-interactively
-            service = get_authenticated_service(interactive_auth_ok=False)
+            # Try to get service non-interactively using existing token
+            service = get_g_service_client_from_token()
             if service:
                 ctx.obj["gmail_service"] = service
                 logger.info("Successfully pre-loaded Gmail service non-interactively.")

@@ -26,11 +26,17 @@ from .models import RuleModel  # Assuming models.py is still in features/rule_ma
 @click.pass_context
 def rules_group(ctx):
     """Manage filtering rules for Damien."""
-    logger = ctx.obj.get("logger")
+    logger = ctx.obj.get("logger") if ctx.obj else None
     # No specific setup needed here for now, as API calls don't need a 'gmail_service' object passed
     # unlike email commands. If rule application needed it, that would be handled in 'apply' cmd.
     if logger:
         logger.debug("Rules command group invoked.")
+    elif ctx.obj is None and ctx.invoked_subcommand != 'login': # Added check for ctx.obj
+        # If obj is None and it's not the login command (which sets up the context),
+        # it's likely an issue for commands that expect context.
+        # For 'rules apply', the check within the command itself handles missing gmail_service.
+        # This log is more for general debugging of context issues.
+        click.echo("Debug: ctx.obj is None in rules_group.", err=True)
 
 
 @rules_group.command("list")
@@ -262,10 +268,38 @@ def apply_rules_cmd(ctx, query, rule_ids, scan_limit, date_after, date_before, a
     By default, only processes emails from the last 30 days unless --all-mail, --date-after, 
     or --date-before options are provided.
     """
-    logger = ctx.obj.get('logger')
-    g_service_client = ctx.obj.get('gmail_service') # Raw Google API client from context
+    # Defensively get logger and g_service_client
+    logger = ctx.obj.get('logger') if ctx.obj else None
+    g_service_client = ctx.obj.get('gmail_service') if ctx.obj else None
     cmd_name = "damien rules apply"
-    
+
+    # CRITICAL: First check for Gmail service availability
+    if not g_service_client:
+        msg = "Damien is not connected to Gmail. Please run `damien login` first."
+        if logger:
+            logger.error(f"{cmd_name} aborted: {msg}")
+        if output_format == 'json':
+            error_payload = {
+                "status": "error",
+                "command_executed": cmd_name,
+                "message": msg,
+                "data": None,
+                "error_details": {
+                    "code": "NO_GMAIL_SERVICE",
+                    "description": "The Gmail service client is not available in the current context. This usually means the user needs to log in or there was an issue during authentication.",
+                    "parameters_provided": { # Log parameters for context
+                        "query": query, "rule_ids": rule_ids, "scan_limit": scan_limit,
+                        "date_after": date_after, "date_before": date_before, "all_mail": all_mail,
+                        "dry_run": dry_run, "confirm": user_must_confirm_apply, "yes": yes
+                    }
+                }
+            }
+            sys.stdout.write(json.dumps(error_payload, indent=2) + '\n')
+        else:
+            click.secho(msg, fg="red")
+        ctx.exit(1) # Ensure this is the final action for this path
+        return # Explicit return to be absolutely sure
+
     # Build the Gmail query with date filtering if needed
     gmail_query = query or ""
     
@@ -291,9 +325,9 @@ def apply_rules_cmd(ctx, query, rule_ids, scan_limit, date_after, date_before, a
         logger.info(f"Using Gmail query: {gmail_query}")
     
     params_provided = {
-        "query": query, 
-        "rule_ids": rule_ids, 
-        "scan_limit": scan_limit, 
+        "query": query,
+        "rule_ids": rule_ids,
+        "scan_limit": scan_limit,
         "date_after": date_after,
         "date_before": date_before,
         "all_mail": all_mail,
@@ -301,17 +335,17 @@ def apply_rules_cmd(ctx, query, rule_ids, scan_limit, date_after, date_before, a
         "confirm": user_must_confirm_apply, # Use new name
         "yes": yes # Added yes
     }
+    # This block was moved up
+    # if not g_service_client:
+    #     msg = "Damien is not connected to Gmail. Please run `damien login` first."
+    #     if output_format == 'json':
+    #         sys.stdout.write(json.dumps({"status":"error", "command_executed": cmd_name, "message":msg, "error_details":{"code":"NO_GMAIL_SERVICE", "details": msg}}, indent=2)+'\n')
+    #     else:
+    #         click.secho(msg, fg="red")
+    #     ctx.exit(1)
+    #     return
     
-    if not g_service_client:
-        msg = "Damien is not connected to Gmail. Please run `damien login` first."
-        if output_format == 'json': 
-            sys.stdout.write(json.dumps({"status":"error", "message":msg, "error_details":{"code":"NO_GMAIL_SERVICE"}}, indent=2)+'\n')
-        else: 
-            click.secho(msg, fg="red")
-        ctx.exit(1)
-        return
-    
-    if logger: 
+    if logger:
         logger.info(f"Executing '{cmd_name}' with params: {params_provided}")
     
     # If no query/scan limit and processing all mail, warn about large operation

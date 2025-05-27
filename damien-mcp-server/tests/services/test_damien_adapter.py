@@ -42,6 +42,7 @@ def mock_damien_integration_module():
     mock.batch_delete_permanently = MagicMock(return_value=True)
     return mock
 
+
 @pytest.fixture
 def mock_rules_module():
     """Fixture to mock the Rules module."""
@@ -222,4 +223,4 @@ async def test_label_emails_tool(adapter, mock_damien_integration_module):
         message_ids=["msg1"],
         add_label_names=["Label1"],
         remove_label_names=["Label2"]
-)
+    )

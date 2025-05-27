@@ -555,7 +555,7 @@ def apply_rules_to_mailbox(
     summary: Dict[str, Any] = {
         "total_emails_scanned": 0,
         "emails_matching_any_rule": 0,
-        # "actions_planned_or_taken" will be populated at the end based on include_detailed_ids
+        "actions_planned_or_taken": defaultdict(list),  # Will be converted to dict at end
         "rules_applied_counts": defaultdict(int),
         "dry_run": dry_run,
         "include_detailed_ids_in_summary": include_detailed_ids, # For clarity in output
@@ -585,6 +585,9 @@ def apply_rules_to_mailbox(
     if not active_rules_to_process:
         logger.info("No active rules to apply (either none defined, none enabled, or specified rules not found).")
         summary["message"] = "No active rules to apply."
+        # Convert defaultdict to regular dict for consistent output
+        summary["actions_planned_or_taken"] = dict(summary["actions_planned_or_taken"])
+        summary["rules_applied_counts"] = dict(summary["rules_applied_counts"])
         return summary
     
     # --- 2. Process each rule separately with server-side filtering ---
@@ -706,7 +709,7 @@ def apply_rules_to_mailbox(
                     message_obj = gmail_api_service.get_message_details(
                         g_service_client, 
                         email_id, 
-                        email_format=email_format
+                        format=email_format
                     )
                     
                     if not message_obj:
@@ -721,9 +724,9 @@ def apply_rules_to_mailbox(
                     
                     # Transform to matchable data
                     matchable_data = transform_gmail_message_to_matchable_data(
-                        message_obj, 
-                        g_service_client, 
-                        gmail_api_service
+                        message_obj,
+                        g_service_client,
+                        gmail_api_service # Pass the correct module, which is a parameter to apply_rules_to_mailbox
                     )
                     
                     # Double-check with client-side matching (for conditions that couldn't be translated to query)
@@ -784,44 +787,77 @@ def apply_rules_to_mailbox(
         for action_key, email_ids_for_action in _internal_actions_on_ids.items():
             if not email_ids_for_action: continue
             
-            unique_email_ids = sorted(list(set(email_ids_for_action)))
-            logger.info(f"Executing action '{action_key}' for {len(unique_email_ids)} email(s).")
+            unique_email_ids_full_list = sorted(list(set(email_ids_for_action)))
+            total_ids_for_action = len(unique_email_ids_full_list)
             
-            try:
-                action_type_main = action_key.split(":")[0]
-                action_success = False
-                
-                if action_type_main == "trash":
-                    action_success = gmail_api_service.batch_trash_messages(g_service_client, unique_email_ids)
-                elif action_type_main == "mark_read":
-                    action_success = gmail_api_service.batch_mark_messages(g_service_client, unique_email_ids, mark_as='read')
-                elif action_type_main == "mark_unread":
-                    action_success = gmail_api_service.batch_mark_messages(g_service_client, unique_email_ids, mark_as='unread')
-                elif action_type_main == "add_label":
-                    label_name_to_add = action_key.split(":")[1]
-                    action_success = gmail_api_service.batch_modify_message_labels(
-                        g_service_client, unique_email_ids, add_label_names=[label_name_to_add]
-                    )
-                elif action_type_main == "remove_label":
-                    label_name_to_remove = action_key.split(":")[1]
-                    action_success = gmail_api_service.batch_modify_message_labels(
-                        g_service_client, unique_email_ids, remove_label_names=[label_name_to_remove]
-                    )
-                
-                if action_success:
-                    executed_actions_counts[action_key] = len(unique_email_ids)
-                    logger.info(f"Successfully executed action '{action_key}' for {len(unique_email_ids)} email(s).")
-                else:
-                    msg = f"Action '{action_key}' reported failure for {len(unique_email_ids)} email(s)."
-                    logger.error(msg)
-                    summary["errors"].append({"error_type": "ACTION_EXECUTION_FAILURE", "action": action_key, "details": msg})
+            # Gmail API batch operations typically have a limit (e.g., 1000 IDs). Chunking is necessary.
+            # Let's use a conservative chunk size, e.g., 500, as batchModify can take multiple label changes.
+            # The Gmail API docs state 1000 for batchDelete and batchModify, but individual message.modify is 100/sec.
+            # For batchModify, the number of label changes also matters.
+            # Let's stick to a safer limit like 500 for batchModify. Trash might also be similar.
+            CHUNK_SIZE = 500
             
-            except (GmailApiError, InvalidParameterError, DamienError) as e:
-                logger.error(f"Error executing action '{action_key}': {e}", exc_info=True)
-                summary["errors"].append({"error_type": "ACTION_EXECUTION_API_ERROR", "action": action_key, "details": str(e)})
-            except Exception as e:
-                logger.error(f"Unexpected error executing action '{action_key}': {e}", exc_info=True)
-                summary["errors"].append({"error_type": "ACTION_EXECUTION_UNEXPECTED_ERROR", "action": action_key, "details": str(e)})
+            action_fully_successful = True # Track if all chunks for this action succeeded
+            
+            for i in range(0, total_ids_for_action, CHUNK_SIZE):
+                chunk_of_ids = unique_email_ids_full_list[i:i + CHUNK_SIZE]
+                if not chunk_of_ids: continue
+
+                logger.info(f"Executing action '{action_key}' for chunk {i//CHUNK_SIZE + 1} with {len(chunk_of_ids)} email(s) (total for action: {total_ids_for_action}).")
+            
+                try:
+                    action_type_main = action_key.split(":")[0]
+                    chunk_action_result = None # Stores the dict from gmail_api_service calls
+                    
+                    if action_type_main == "trash":
+                        chunk_action_result = gmail_api_service.batch_trash_messages(g_service_client, chunk_of_ids)
+                    elif action_type_main == "mark_read":
+                        chunk_action_result = gmail_api_service.batch_mark_messages(g_service_client, chunk_of_ids, mark_as='read')
+                    elif action_type_main == "mark_unread":
+                        chunk_action_result = gmail_api_service.batch_mark_messages(g_service_client, chunk_of_ids, mark_as='unread')
+                    elif action_type_main == "add_label":
+                        label_name_to_add = action_key.split(":")[1]
+                        chunk_action_result = gmail_api_service.batch_modify_message_labels(
+                            g_service_client, chunk_of_ids, add_label_names=[label_name_to_add]
+                        )
+                    elif action_type_main == "remove_label":
+                        label_name_to_remove = action_key.split(":")[1]
+                        chunk_action_result = gmail_api_service.batch_modify_message_labels(
+                            g_service_client, chunk_of_ids, remove_label_names=[label_name_to_remove]
+                        )
+                    
+                    # Check success from the result dict (assuming it has a 'success' key)
+                    if chunk_action_result and chunk_action_result.get("success"):
+                        executed_actions_counts[action_key] += len(chunk_of_ids) # Increment by chunk size
+                        logger.info(f"Successfully executed action '{action_key}' for chunk of {len(chunk_of_ids)} email(s).")
+                    else:
+                        action_fully_successful = False
+                        msg = f"Action '{action_key}' reported failure for chunk of {len(chunk_of_ids)} email(s). Result: {chunk_action_result}"
+                        logger.error(msg)
+                        summary["errors"].append({"error_type": "ACTION_CHUNK_FAILURE", "action": action_key, "details": msg, "chunk_ids_sample": chunk_of_ids[:5]})
+                        # Decide if we should break from processing further chunks for this action_key
+                        # For now, let's continue with other chunks but mark the action as not fully successful.
+                
+                except (GmailApiError, InvalidParameterError, DamienError) as e: # Catch specific errors from gmail_api_service
+                    action_fully_successful = False
+                    logger.error(f"Error executing action '{action_key}' on chunk: {e}", exc_info=True)
+                    summary["errors"].append({"error_type": "ACTION_CHUNK_API_ERROR", "action": action_key, "details": str(e), "chunk_ids_sample": chunk_of_ids[:5]})
+                    # Continue to next chunk or next action? For now, continue to next chunk.
+                except Exception as e: # Catch any other unexpected error during chunk processing
+                    action_fully_successful = False
+                    logger.error(f"Unexpected error executing action '{action_key}' on chunk: {e}", exc_info=True)
+                    summary["errors"].append({"error_type": "ACTION_CHUNK_UNEXPECTED_ERROR", "action": action_key, "details": str(e), "chunk_ids_sample": chunk_of_ids[:5]})
+
+            # After processing all chunks for an action_key
+            if action_fully_successful and total_ids_for_action > 0 :
+                 logger.info(f"Action '{action_key}' fully completed for all {total_ids_for_action} email(s).")
+            elif not action_fully_successful and total_ids_for_action > 0:
+                 logger.warning(f"Action '{action_key}' had errors for some chunks. Total processed for this action: {executed_actions_counts.get(action_key, 0)} out of {total_ids_for_action}.")
+
+        # This block is now part of the loop above, checking chunk_action_result.get("success")
+        # if action_success:
+        #    executed_actions_counts[action_key] = len(unique_email_ids)
+        #    logger.info(f"Successfully executed action '{action_key}' for {len(unique_email_ids)} email(s).")
         
         summary["actions_planned_or_taken"] = executed_actions_counts # For non-dry_run, this shows counts of what was done.
     
@@ -833,4 +869,11 @@ def apply_rules_to_mailbox(
             summary["actions_planned_or_taken"] = {k: len(set(v)) for k, v in _internal_actions_on_ids.items()}
     
     logger.info(f"Rule application finished. Results: {summary}")
+    
+    # Convert defaultdicts to regular dicts for consistent output
+    if isinstance(summary["actions_planned_or_taken"], defaultdict):
+        summary["actions_planned_or_taken"] = dict(summary["actions_planned_or_taken"])
+    if isinstance(summary["rules_applied_counts"], defaultdict):
+        summary["rules_applied_counts"] = dict(summary["rules_applied_counts"])
+    
     return summary

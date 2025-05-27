@@ -903,10 +903,10 @@ def test_apply_rules_to_mailbox_with_execution(mock_g_service_client, mock_gmail
             return {'messages': potential_messages[:max_results], 'nextPageToken': None}
         mock_gmail_api_module.list_messages.side_effect = list_messages_side_effect
         
-        # Mock batch operations to return True (success)
-        mock_gmail_api_module.batch_trash_messages.return_value = True
-        mock_gmail_api_module.batch_modify_message_labels.return_value = True
-        
+        # Mock batch operations to return a dict indicating success and count
+        mock_gmail_api_module.batch_trash_messages.return_value = {"success": True, "trashed_count": 0} # Count will be updated by actual calls
+        mock_gmail_api_module.batch_modify_message_labels.return_value = {"success": True, "modified_count": 0} # Count will be updated
+
         # Mock transform and does_email_match
         with patch('damien_cli.core_api.rules_api_service.transform_gmail_message_to_matchable_data') as mock_transform:
             with patch('damien_cli.core_api.rules_api_service.does_email_match_rule') as mock_does_match:

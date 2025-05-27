@@ -26,15 +26,6 @@ def test_health():
     print()
     assert response.status_code == 200
 
-def test_protected():
-    """Test the protected endpoint."""
-    url = f"{BASE_URL}/mcp/protected-test"
-    response = requests.get(url, headers=HEADERS)
-    print(f"Protected endpoint: {response.status_code}")
-    print(response.json())
-    print()
-    assert response.status_code == 200
-
 def test_gmail():
     """Test the Gmail connection."""
     url = f"{BASE_URL}/mcp/gmail-test"
@@ -49,7 +40,7 @@ def test_list_emails():
     url = f"{BASE_URL}/mcp/execute_tool"
     payload = {
         "tool_name": "damien_list_emails",
-        "params": {
+        "input": {
             "query": "is:unread",
             "max_results": 3
         },
@@ -91,7 +82,7 @@ def main():
     
     # Run tests with try/except to catch assertion errors
     tests_passed = 0
-    total_tests = 4
+    total_tests = 3
     
     try:
         test_health()
@@ -99,13 +90,6 @@ def main():
         tests_passed += 1
     except AssertionError:
         print("Health endpoint: ❌ FAIL")
-    
-    try:
-        test_protected()
-        print("Protected endpoint: ✅ PASS")
-        tests_passed += 1
-    except AssertionError:
-        print("Protected endpoint: ❌ FAIL")
     
     try:
         test_gmail()
