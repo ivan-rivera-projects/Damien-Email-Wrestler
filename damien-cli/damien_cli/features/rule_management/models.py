@@ -10,7 +10,7 @@ import uuid
 class ConditionModel(BaseModel):
     field: Literal[
         "from", "subject", "body_snippet", "to", "label", # Existing
-        "date_age", "has_attachment", "attachment_filename", "message_size" # New
+        "date_age", "age_days", "has_attachment", "attachment_filename", "message_size" # New
     ]
     operator: Literal[
         "contains", "not_contains", "equals", "not_equals", "starts_with", "ends_with", # Existing
@@ -22,7 +22,7 @@ class ConditionModel(BaseModel):
 
 
 class ActionModel(BaseModel):
-    type: Literal["trash", "add_label", "remove_label", "mark_read", "mark_unread"]
+    type: Literal["trash", "add_label", "remove_label", "mark_read", "mark_unread", "archive", "forward"]
     label_name: Optional[str] = None
 
     @model_validator(mode="after")
