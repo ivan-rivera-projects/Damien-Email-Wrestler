@@ -31,3 +31,18 @@ def _confirm_action(
     if logger:
         logger.info(f"User confirmed action for prompt: '{prompt_message}'")
     return True, "" # Confirmed by user, no specific message needed from here
+
+def format_output(data: dict, output_format: str = "human") -> str:
+    """
+    Formats the output data based on the specified format.
+    Placeholder implementation.
+    """
+    if output_format == "json":
+        import json
+        return json.dumps(data, indent=2)
+    else:
+        # Basic human-readable format
+        output = []
+        for key, value in data.items():
+            output.append(f"{key.replace('_', ' ').title()}: {value}")
+        return "\n".join(output)
