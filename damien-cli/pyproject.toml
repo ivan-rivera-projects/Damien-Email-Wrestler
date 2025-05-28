@@ -13,7 +13,7 @@ packages = [
 
 [tool.poetry.dependencies]
 # The Python version constraint is specified here as 'python'.
-python = ">=3.13"
+python = ">=3.11"
 
 # Main application dependencies are listed here.
 click = ">=8.2.0,<9.0.0"
@@ -25,6 +25,9 @@ pydantic-settings = "^2.3.4" # Added for BaseSettings
 openai = "^1.35.0"  # For GPT integration
 tiktoken = "^0.7.0"  # For token counting
 python-json-logger = "^2.0.7" # Added for structured logging
+torch = "2.2.2"  # PyTorch CPU version - pinned to exact working version
+sentence-transformers = "4.1.0"  # For sentence embeddings
+numpy = "1.26.4"  # Required for compatibility with PyTorch
 
 [tool.poetry.group.dev.dependencies]
 # Development-specific dependencies.
