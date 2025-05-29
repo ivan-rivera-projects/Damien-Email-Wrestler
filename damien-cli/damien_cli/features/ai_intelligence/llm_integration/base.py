@@ -10,7 +10,7 @@ from .cost_management import UsageTracker # Added import
 # from .providers.anthropic_provider import AnthropicProvider
 # from .providers.local_provider import LocalLLMProvider
 # from .providers.google_provider import GoogleProvider # If/when implemented
-from damien_cli.core.config import settings # If loading config globally
+from damien_cli.core.config import settings
 
 class LLMProvider(Enum):
     OPENAI = "openai"
@@ -230,7 +230,7 @@ class LLMServiceOrchestrator:
                 final_providers_config = {}
         
         self.providers: Dict[LLMProvider, BaseLLMService] = self._init_providers(final_providers_config or {})
-        self.provider_selector = ProviderSelector(self.providers)
+        self.provider_selector = ProviderSelector(self.providers, final_providers_config or {})
         self.monitor = UsageTracker()
     
     def _init_providers(self, config_map: Dict[str, Dict[str, Any]]) -> Dict[LLMProvider, BaseLLMService]:
@@ -326,7 +326,7 @@ class LLMServiceOrchestrator:
         
         # Select provider based on multiple factors
         # The select_provider method now primarily uses hints from request.metadata
-        provider = self.provider_selector.select_llm_service_provider( # Renamed method
+        provider = self.provider_selector.select_provider(
             request=request,
             preferred_provider_enum=preferred_provider, # Pass the enum directly
             budget_limit=budget_limit,

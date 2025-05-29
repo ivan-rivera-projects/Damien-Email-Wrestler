@@ -5,7 +5,7 @@ import os
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, project_root)
 
-from features.ai_intelligence.llm_integration.utils import TokenCounter
+from damien_cli.features.ai_intelligence.llm_integration.utils import TokenCounter
 
 def run_tests():
     print("Testing TokenCounter functionality...")

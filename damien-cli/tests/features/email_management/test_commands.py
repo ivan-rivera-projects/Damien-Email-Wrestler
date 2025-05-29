@@ -257,7 +257,7 @@ def test_emails_get_not_found_human(
 
 # --- NEW TESTS for Phase 2 Write Commands ---
 # Note: For commands using the new _confirm_action, we'll patch that instead of click.confirm directly.
-@patch("damien_cli.features.email_management.commands._confirm_action") # Corrected patch target
+@patch("damien_cli.core.cli_utils._confirm_action")
 @patch("damien_cli.core_api.gmail_api_service.batch_trash_messages")
 def test_emails_trash_cmd_dry_run(
     mock_api_batch_trash,
@@ -285,7 +285,7 @@ def test_emails_trash_cmd_dry_run(
     mock_shared_confirm_action.assert_not_called() # _confirm_action is not called in dry_run
 
 
-@patch("damien_cli.features.email_management.commands._confirm_action") # Corrected patch target
+@patch("damien_cli.core.cli_utils._confirm_action")
 @patch("damien_cli.core_api.gmail_api_service.batch_trash_messages")
 def test_emails_trash_cmd_confirmed_interactively( # Renamed for clarity
     mock_api_batch_trash,
@@ -319,7 +319,7 @@ def test_emails_trash_cmd_confirmed_interactively( # Renamed for clarity
     assert "Successfully moved 2 email(s) to Trash." in result.output
 
 
-@patch("damien_cli.features.email_management.commands._confirm_action") # Corrected patch target
+@patch("damien_cli.core.cli_utils._confirm_action")
 @patch("damien_cli.core_api.gmail_api_service.batch_trash_messages")
 def test_emails_trash_cmd_aborted_interactively( # Renamed for clarity
     mock_api_batch_trash,
@@ -350,7 +350,7 @@ def test_emails_trash_cmd_aborted_interactively( # Renamed for clarity
     assert "Action aborted by user." in result.output # This message is now echoed by the command
 
 
-@patch("damien_cli.features.email_management.commands._confirm_action") # Corrected patch target
+@patch("damien_cli.core.cli_utils._confirm_action")
 @patch("damien_cli.core_api.gmail_api_service.batch_trash_messages")
 def test_emails_trash_cmd_with_yes_flag(
     mock_api_batch_trash,
@@ -391,7 +391,7 @@ def test_emails_trash_cmd_with_yes_flag(
 
 # Tests for 'damien emails delete'
 @patch("damien_cli.features.email_management.commands.click.prompt") # Still need for YESIDO
-@patch("damien_cli.features.email_management.commands._confirm_action") # Corrected patch target
+@patch("damien_cli.core.cli_utils._confirm_action")
 @patch("damien_cli.core_api.gmail_api_service.batch_delete_permanently")
 def test_emails_delete_cmd_confirmed_interactively( # Renamed
     mock_api_batch_delete,
@@ -437,7 +437,7 @@ def test_emails_delete_cmd_confirmed_interactively( # Renamed
 
 
 @patch("damien_cli.features.email_management.commands.click.prompt") # Still need for YESIDO
-@patch("damien_cli.features.email_management.commands._confirm_action") # Corrected patch target
+@patch("damien_cli.core.cli_utils._confirm_action")
 @patch("damien_cli.core_api.gmail_api_service.batch_delete_permanently")
 def test_emails_delete_cmd_abort_at_type_yesido_interactively( # Renamed
     mock_api_batch_delete,
@@ -474,7 +474,7 @@ def test_emails_delete_cmd_abort_at_type_yesido_interactively( # Renamed
 
 
 @patch("damien_cli.features.email_management.commands.click.prompt") # click.prompt for YESIDO is not used if --yes
-@patch("damien_cli.features.email_management.commands._confirm_action") # Corrected patch target
+@patch("damien_cli.core.cli_utils._confirm_action")
 @patch("damien_cli.core_api.gmail_api_service.batch_delete_permanently")
 def test_emails_delete_cmd_with_yes_flag(
     mock_api_batch_delete,
@@ -529,7 +529,7 @@ def test_emails_delete_cmd_with_yes_flag(
 
 
 # Tests for 'damien emails label'
-@patch("damien_cli.features.email_management.commands._confirm_action") # Patch _confirm_action
+@patch("damien_cli.core.cli_utils._confirm_action") # Patch _confirm_action
 @patch("damien_cli.core_api.gmail_api_service.batch_modify_message_labels")
 def test_emails_label_cmd_add_label(
     mock_api_batch_modify,
@@ -563,7 +563,7 @@ def test_emails_label_cmd_add_label(
 
 
 # Tests for 'damien emails mark'
-@patch("damien_cli.features.email_management.commands._confirm_action") # Patch _confirm_action
+@patch("damien_cli.core.cli_utils._confirm_action") # Patch _confirm_action
 @patch("damien_cli.core_api.gmail_api_service.batch_mark_messages")
 def test_emails_mark_cmd_read(
     mock_api_batch_mark,

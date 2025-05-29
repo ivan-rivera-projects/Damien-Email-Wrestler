@@ -4,7 +4,7 @@ import time
 from typing import Dict, List, Optional, Any, AsyncGenerator
 
 from ..base import BaseLLMService, LLMRequest, LLMResponse, LLMProvider
-from .....core.app_logging import get_logger # Changed to app_logging
+from damien_cli.core.app_logging import get_logger
 
 logger = get_logger(__name__)
 

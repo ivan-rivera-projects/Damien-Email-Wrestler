@@ -9,7 +9,7 @@ sys.path.insert(0, project_root)
 
 # Import the Settings class definition, not the instance
 from damien_cli.core.config import Settings
-from features.ai_intelligence.llm_integration.base import LLMServiceOrchestrator, LLMRequest, LLMProvider
+from damien_cli.features.ai_intelligence.llm_integration.base import LLMServiceOrchestrator, LLMRequest, LLMProvider
 
 async def run_connectivity_tests():
     # Explicitly load .env from the root for this test script
@@ -26,8 +26,8 @@ async def run_connectivity_tests():
     try:
         local_settings = Settings()
         print("Connectivity Test: Successfully instantiated local_settings.")
-        print(f"Loaded OpenAI Key: {'SET' if local_settings.OPENAI_API_KEY else 'NOT SET'}")
-        print(f"Loaded Anthropic Key: {'SET' if local_settings.ANTHROPIC_API_KEY else 'NOT SET'}")
+        print(f"Loaded OpenAI Key: {'SET' if local_settings.openai_api_key else 'NOT SET'}")
+        print(f"Loaded Anthropic Key: {'SET' if local_settings.anthropic_api_key else 'NOT SET'}")
         print(f"OpenAI default model from local_settings: {local_settings.LLM_PROVIDERS_CONFIGURATION.get('openai', {}).get('default_model')}")
         print(f"Anthropic default model from local_settings: {local_settings.LLM_PROVIDERS_CONFIGURATION.get('anthropic', {}).get('default_model')}")
     except Exception as e:
@@ -85,15 +85,14 @@ async def run_connectivity_tests():
 
 
 if __name__ == "__main__":
-    # Instantiate settings here just for the pre-flight check, actual settings for test are in run_connectivity_tests
-    # This is a bit redundant now but keeps the pre-flight check logic
+    # Instantiate settings here just for the pre-flight check
     temp_settings_for_check = Settings()
-    if not temp_settings_for_check.OPENAI_API_KEY and not temp_settings_for_check.ANTHROPIC_API_KEY:
-        print("Neither OPENAI_API_KEY nor ANTHROPIC_API_KEY seem to be loaded from your .env file for pre-flight check.")
+    if not temp_settings_for_check.openai_api_key and not temp_settings_for_check.anthropic_api_key:
+        print("Neither openai_api_key nor anthropic_api_key seem to be loaded from your .env file for pre-flight check.")
         print("Connectivity tests will likely fail for configured providers.")
-    elif not temp_settings_for_check.OPENAI_API_KEY:
-        print("Warning (pre-flight): OPENAI_API_KEY is not set. OpenAI test will fail if provider is enabled.")
-    elif not temp_settings_for_check.ANTHROPIC_API_KEY:
-        print("Warning (pre-flight): ANTHROPIC_API_KEY is not set. Anthropic test will fail if provider is enabled.")
+    elif not temp_settings_for_check.openai_api_key:
+        print("Warning (pre-flight): openai_api_key is not set. OpenAI test will fail if provider is enabled.")
+    elif not temp_settings_for_check.anthropic_api_key:
+        print("Warning (pre-flight): anthropic_api_key is not set. Anthropic test will fail if provider is enabled.")
         
     asyncio.run(run_connectivity_tests())

@@ -7,8 +7,8 @@ import tiktoken
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from ..base import BaseLLMService, LLMRequest, LLMResponse, LLMProvider
-from .....core.config import settings
-from .....core.app_logging import get_logger # Changed to app_logging
+from damien_cli.core.config import settings
+from damien_cli.core.app_logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -57,10 +57,11 @@ class OpenAIProvider(BaseLLMService):
             
             # Check cache
             cache_key = self._generate_cache_key(request)
-            cached_response = await self.cache.get(cache_key)
-            if cached_response:
-                logger.info(f"Cache hit for request: {cache_key}")
-                return cached_response
+            if self.cache:
+                cached_response = await self.cache.get(cache_key)
+                if cached_response:
+                    logger.info(f"Cache hit for request: {cache_key}")
+                    return cached_response
             
             # Prepare messages
             messages = self._build_messages(request)
@@ -108,7 +109,8 @@ class OpenAIProvider(BaseLLMService):
             )
             
             # Cache successful response
-            await self.cache.set(cache_key, llm_response, ttl=3600)
+            if self.cache:
+                await self.cache.set(cache_key, llm_response, ttl=3600)
             
             # Track usage
             await self._track_usage(llm_response)

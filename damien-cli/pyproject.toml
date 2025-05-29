@@ -49,6 +49,7 @@ psutil = "^5.9.0"  # For system monitoring (performance metrics)
 # chromadb = "^0.4.0"  # For vector storage - OPTIONAL (can add back if needed)
 python-dotenv = "^1.1.0"
 tenacity = "^9.1.2"
+anthropic = "^0.52.1"
 
 [tool.poetry.group.dev.dependencies]
 # Development-specific dependencies.
@@ -57,6 +58,7 @@ pytest-cov = "^6.1.1"
 black = "^25.1.0"
 flake8 = "^7.2.0"
 pytest-asyncio = "^0.23.0" # Added for running async tests
+pytest-benchmark = "^5.1.0"
 
 [tool.poetry.scripts]
 damien = "damien_cli.cli_entry:damien"
