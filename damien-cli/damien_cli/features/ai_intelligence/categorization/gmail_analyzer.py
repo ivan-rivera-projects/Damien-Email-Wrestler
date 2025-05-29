@@ -174,8 +174,8 @@ class GmailEmailAnalyzer:
             # Fetch email list with progress tracking
             print(f"🔍 Searching Gmail with query: {query}")
             response = gmail_api_service.list_messages(
-                service=self.gmail_service,
-                query=query,
+                self.gmail_service,
+                query_string=query,
                 max_results=max_emails
             )
             
@@ -193,9 +193,9 @@ class GmailEmailAnalyzer:
             for i, msg_id in enumerate(tqdm(message_ids, desc="📧 Fetching email details")):
                 try:
                     email_details = gmail_api_service.get_message_details(
-                        service=self.gmail_service,
+                        self.gmail_service,
                         message_id=msg_id,
-                        format_option='metadata'
+                        format='metadata'
                     )
                     
                     # Process email response

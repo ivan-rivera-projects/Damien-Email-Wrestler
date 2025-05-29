@@ -67,7 +67,15 @@ class BatchEmailProcessor:
             # Calculate throughput
             throughput = processed_count / processing_time if processing_time > 0 else 0
             
-            # Create result object
+            # Calculate memory and CPU usage (basic implementation)
+            import psutil
+            import os
+            process = psutil.Process(os.getpid())
+            memory_info = process.memory_info()
+            peak_memory_mb = memory_info.rss / 1024 / 1024  # Convert to MB
+            avg_cpu_percent = process.cpu_percent()
+            
+            # Create result object with all required fields
             result = BatchProcessingResult(
                 total_items=len(emails),
                 processed_successfully=processed_count,
@@ -75,6 +83,14 @@ class BatchEmailProcessor:
                 skipped_items=skipped_count,
                 processing_time_seconds=processing_time,
                 throughput_per_second=throughput,
+                
+                # Missing required fields - ADD THESE:
+                peak_memory_usage_mb=peak_memory_mb,
+                average_cpu_usage_percent=avg_cpu_percent,
+                patterns_discovered=0,  # Will be set by pattern detection
+                suggestions_created=0,  # Will be set by suggestion generation
+                retry_attempts=0,  # Track retry attempts
+                
                 embeddings_generated=len(embeddings),
                 errors=errors,
                 batch_size=self.batch_size,
@@ -87,7 +103,13 @@ class BatchEmailProcessor:
             logger.error(f"Critical error in batch processing: {str(e)}")
             processing_time = (datetime.now() - start_time).total_seconds()
             
-            # Return error result
+            # Return error result with all required fields
+            import psutil
+            import os
+            process = psutil.Process(os.getpid())
+            memory_info = process.memory_info()
+            peak_memory_mb = memory_info.rss / 1024 / 1024
+            
             error_result = BatchProcessingResult(
                 total_items=len(emails),
                 processed_successfully=0,
@@ -95,6 +117,14 @@ class BatchEmailProcessor:
                 skipped_items=0,
                 processing_time_seconds=processing_time,
                 throughput_per_second=0.0,
+                
+                # Missing required fields:
+                peak_memory_usage_mb=peak_memory_mb,
+                average_cpu_usage_percent=0.0,
+                patterns_discovered=0,
+                suggestions_created=0,
+                retry_attempts=0,
+                
                 embeddings_generated=0,
                 batch_size=self.batch_size,
                 parallel_workers=1
@@ -169,6 +199,13 @@ class BatchEmailProcessor:
             
             processing_time = (datetime.now() - start_time).total_seconds()
             
+            # Calculate memory usage
+            import psutil
+            import os
+            process = psutil.Process(os.getpid())
+            memory_info = process.memory_info()
+            peak_memory_mb = memory_info.rss / 1024 / 1024
+            
             return BatchProcessingResult(
                 total_items=len(emails),
                 processed_successfully=processed_count,
@@ -176,6 +213,14 @@ class BatchEmailProcessor:
                 skipped_items=0,
                 processing_time_seconds=processing_time,
                 throughput_per_second=processed_count / processing_time if processing_time > 0 else 0,
+                
+                # Required fields:
+                peak_memory_usage_mb=peak_memory_mb,
+                average_cpu_usage_percent=process.cpu_percent(),
+                patterns_discovered=0,
+                suggestions_created=0,
+                retry_attempts=0,
+                
                 errors=errors,
                 batch_size=self.batch_size,
                 parallel_workers=1
@@ -185,6 +230,13 @@ class BatchEmailProcessor:
             logger.error(f"Critical error in sync batch processing: {str(e)}")
             processing_time = (datetime.now() - start_time).total_seconds()
             
+            # Calculate memory usage for error case
+            import psutil
+            import os
+            process = psutil.Process(os.getpid())
+            memory_info = process.memory_info()
+            peak_memory_mb = memory_info.rss / 1024 / 1024
+            
             error_result = BatchProcessingResult(
                 total_items=len(emails),
                 processed_successfully=processed_count,
@@ -192,6 +244,14 @@ class BatchEmailProcessor:
                 skipped_items=0,
                 processing_time_seconds=processing_time,
                 throughput_per_second=0.0,
+                
+                # Required fields:
+                peak_memory_usage_mb=peak_memory_mb,
+                average_cpu_usage_percent=0.0,
+                patterns_discovered=0,
+                suggestions_created=0,
+                retry_attempts=0,
+                
                 batch_size=self.batch_size,
                 parallel_workers=1
             )

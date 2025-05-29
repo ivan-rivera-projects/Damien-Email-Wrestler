@@ -171,7 +171,7 @@ class EnhancedBaseModel(BaseModel):
 class PerformanceMetrics(BaseModel):
     """Performance tracking for operations"""
     
-    model_config = ConfigDict(frozen=True, slots=True)
+    model_config = ConfigDict(frozen=False, slots=True)
     
     operation_name: str
     start_time: datetime
@@ -505,9 +505,24 @@ class EmailPattern(EnhancedBaseModel):
     
     # Confidence and quality
     confidence: float = Field(ge=0.0, le=1.0)
-    confidence_level: ConfidenceLevel
+    confidence_level: ConfidenceLevel = Field(default=ConfidenceLevel.MEDIUM)
     quality_score: float = Field(ge=0.0, le=1.0, default=0.5)
     statistical_significance: float = Field(ge=0.0, le=1.0, default=0.5)
+    
+    @model_validator(mode='after')
+    def set_confidence_level(self):
+        """Automatically set confidence level based on confidence score"""
+        if self.confidence >= 0.9:
+            self.confidence_level = ConfidenceLevel.VERY_HIGH
+        elif self.confidence >= 0.8:
+            self.confidence_level = ConfidenceLevel.HIGH
+        elif self.confidence >= 0.6:
+            self.confidence_level = ConfidenceLevel.MEDIUM
+        elif self.confidence >= 0.4:
+            self.confidence_level = ConfidenceLevel.LOW
+        else:
+            self.confidence_level = ConfidenceLevel.VERY_LOW
+        return self
     
     # Rich characteristics
     characteristics: PatternCharacteristics
@@ -539,18 +554,6 @@ class EmailPattern(EnhancedBaseModel):
             expected_prevalence = self.email_count / self.total_email_universe
             if abs(self.prevalence_rate - expected_prevalence) > 0.01:
                 self.prevalence_rate = expected_prevalence
-        
-        # Set confidence level based on confidence score
-        if self.confidence >= 0.9:
-            self.confidence_level = ConfidenceLevel.VERY_HIGH
-        elif self.confidence >= 0.8:
-            self.confidence_level = ConfidenceLevel.HIGH
-        elif self.confidence >= 0.6:
-            self.confidence_level = ConfidenceLevel.MEDIUM
-        elif self.confidence >= 0.4:
-            self.confidence_level = ConfidenceLevel.LOW
-        else:
-            self.confidence_level = ConfidenceLevel.VERY_LOW
         
         return self
     
@@ -907,7 +910,7 @@ class EmailAnalysisResult(EnhancedBaseModel):
     
     # Business insights
     automation_opportunities: List[Dict[str, Any]] = Field(default_factory=list)
-    estimated_total_time_savings: float = Field(ge=0.0)
+    estimated_total_time_savings: float = Field(ge=0.0, default=0.0)
     roi_projections: Dict[str, float] = Field(default_factory=dict)
     
     # Data provenance
