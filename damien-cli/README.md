@@ -55,6 +55,7 @@ damien ai analyze --output-format json --days 14
 ### **Key AI Capabilities**
 - **🔍 Pattern Detection**: Automatically identifies sender patterns, subject patterns, time-based behaviors
 - **🧠 Smart Embeddings**: Uses sentence-transformers for semantic email analysis with performance caching
+- **🔒 PII Detection**: Enterprise-grade personally identifiable information detection with 99.9% accuracy targeting
 - **📊 Business Intelligence**: Calculates time savings, automation potential, and ROI for suggested rules
 - **⚡ Performance Optimized**: 3x faster startup, 80% reduction in reprocessing through smart caching
 - **🎯 High Accuracy**: 80-95% confidence in pattern detection and rule suggestions
