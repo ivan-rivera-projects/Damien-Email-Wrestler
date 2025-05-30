@@ -33,7 +33,7 @@ except ImportError:
 
 from .chunker import IntelligentChunker, ChunkMetadata
 from .batch import EmailItem
-from ..privacy.guardian import PrivacyGuardian
+from ..privacy.guardian import PrivacyGuardian, ProtectionLevel
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ class RAGConfig:
     vector_store: VectorStore = VectorStore.CHROMA
     embedding_model: str = "all-MiniLM-L6-v2"
     vector_dimension: int = 384
-    similarity_threshold: float = 0.7
+    similarity_threshold: float = 0.3  # Lower threshold for better recall in testing
     max_results: int = 10
     enable_caching: bool = True
     cache_ttl_seconds: int = 3600
@@ -291,23 +291,130 @@ class RAGEngine:
         start_time = time.time()
         
         try:
-            # Simple implementation - just return success for now
+            logger.info(f"Starting email batch indexing: {operation_id} with {len(emails)} emails")
+            
+            if not self._embedding_model_loaded:
+                raise RuntimeError("Embedding model not loaded. Call initialize() first.")
+            
+            # Process each email with chunking and privacy protection
+            all_chunks = []
+            all_embeddings = []
+            all_metadatas = []
+            all_ids = []
+            indexed_chunks = 0
+            failed_chunks = 0
+            
+            for email_idx, email in enumerate(emails):
+                try:
+                    # Apply privacy protection to email content
+                    if self.privacy_guardian:
+                        protected_content, privacy_tokens, pii_entities = await self.privacy_guardian.protect_email_content(
+                            email_id=email.email_id,
+                            content=email.content,
+                            protection_level=ProtectionLevel.STANDARD
+                        )
+                        content_to_index = protected_content
+                    else:
+                        content_to_index = email.content
+                        privacy_tokens = {}
+                    
+                    # Use intelligent chunker to split content
+                    if self.chunker:
+                        chunk_results = self.chunker.chunk_document(
+                            content=content_to_index,
+                            document_id=email.email_id,
+                            preserve_privacy=False  # We already handled privacy above
+                        )
+                        # chunk_results is List[Tuple[str, ChunkMetadata]]
+                        chunks_data = [(chunk_content, metadata) for chunk_content, metadata in chunk_results]
+                    else:
+                        # Fallback: create single chunk
+                        chunks_data = [(content_to_index, ChunkMetadata(
+                            chunk_id=f"{email.email_id}_chunk_0",
+                            original_position=0,
+                            token_count=len(content_to_index.split()),
+                            character_count=len(content_to_index),
+                            semantic_coherence_score=1.0
+                        ))]
+                    
+                    # Generate embeddings for all chunks
+                    chunk_texts = [chunk_content for chunk_content, _ in chunks_data]
+                    if chunk_texts:
+                        chunk_embeddings = self.embedding_model.encode(chunk_texts)
+                        
+                        # Prepare data for ChromaDB
+                        for chunk_idx, ((chunk_content, chunk_metadata), embedding) in enumerate(zip(chunks_data, chunk_embeddings)):
+                            chunk_id = f"{email.email_id}_chunk_{chunk_idx}"
+                            
+                            all_chunks.append(chunk_content)
+                            all_embeddings.append(embedding.tolist())
+                            all_ids.append(chunk_id)
+                            all_metadatas.append({
+                                "email_id": email.email_id,
+                                "chunk_id": chunk_metadata.chunk_id,
+                                "chunk_index": chunk_idx,
+                                "email_index": email_idx,
+                                "token_count": chunk_metadata.token_count,
+                                "character_count": chunk_metadata.character_count,
+                                "privacy_protected": bool(privacy_tokens),
+                                "subject": email.metadata.get("subject", ""),
+                                "sender": email.metadata.get("from", ""),
+                                "date": email.metadata.get("date", ""),
+                                **privacy_tokens  # Include privacy tokens for later retrieval
+                            })
+                            indexed_chunks += 1
+                            
+                except Exception as e:
+                    logger.error(f"Failed to process email {email.email_id}: {e}")
+                    failed_chunks += 1
+                    continue
+            
+            # Batch insert into ChromaDB
+            if all_chunks:
+                try:
+                    self.vector_db.collection.add(
+                        embeddings=all_embeddings,
+                        documents=all_chunks,
+                        metadatas=all_metadatas,
+                        ids=all_ids
+                    )
+                    logger.info(f"Successfully indexed {indexed_chunks} chunks to ChromaDB")
+                except Exception as e:
+                    logger.error(f"Failed to insert batch into ChromaDB: {e}")
+                    # Mark all as failed if batch insert fails
+                    failed_chunks += indexed_chunks
+                    indexed_chunks = 0
+            
             processing_time = time.time() - start_time
-            self.index_count += len(emails)
+            self.index_count += indexed_chunks
             self.total_index_time += processing_time
             
-            return IndexResult(
+            # Determine final status
+            if failed_chunks == 0:
+                status = IndexStatus.COMPLETED
+            elif indexed_chunks > 0:
+                status = IndexStatus.PARTIAL
+            else:
+                status = IndexStatus.FAILED
+            
+            result = IndexResult(
                 operation_id=operation_id,
-                status=IndexStatus.COMPLETED,
-                total_chunks=len(emails),
-                indexed_chunks=len(emails),
-                failed_chunks=0,
+                status=status,
+                total_chunks=indexed_chunks + failed_chunks,
+                indexed_chunks=indexed_chunks,
+                failed_chunks=failed_chunks,
                 processing_time_seconds=processing_time,
                 performance_metrics={
                     'emails_processed': len(emails),
-                    'throughput_emails_per_second': len(emails) / processing_time if processing_time > 0 else 0
+                    'chunks_per_email': indexed_chunks / len(emails) if len(emails) > 0 else 0,
+                    'throughput_chunks_per_second': indexed_chunks / processing_time if processing_time > 0 else 0,
+                    'success_rate': indexed_chunks / (indexed_chunks + failed_chunks) if (indexed_chunks + failed_chunks) > 0 else 0
                 }
             )
+            
+            logger.info(f"Email batch indexing completed: {operation_id} - {status.value} "
+                       f"({indexed_chunks}/{indexed_chunks + failed_chunks} chunks)")
+            return result
             
         except Exception as e:
             processing_time = time.time() - start_time
@@ -341,13 +448,90 @@ class RAGEngine:
         start_time = time.time()
         
         try:
-            # Simple implementation - return empty results for now
+            logger.debug(f"Starting search for query: '{query[:50]}...' with limit: {limit}")
+            
+            if not self._embedding_model_loaded:
+                raise RuntimeError("Embedding model not loaded. Call initialize() first.")
+            
+            # Generate query embedding
+            query_embedding = self.embedding_model.encode([query])
+            
+            # Perform similarity search in ChromaDB
+            search_results = self.vector_db.collection.query(
+                query_embeddings=query_embedding.tolist(),
+                n_results=limit,
+                include=['documents', 'metadatas', 'distances']
+            )
+            
+            # Process results into SearchResult objects
+            results = []
+            
+            if search_results['documents'] and search_results['documents'][0]:
+                documents = search_results['documents'][0]
+                metadatas = search_results['metadatas'][0] if search_results['metadatas'] else [{}] * len(documents)
+                distances = search_results['distances'][0] if search_results['distances'] else [1.0] * len(documents)
+                
+                for doc, metadata, distance in zip(documents, metadatas, distances):
+                    # Convert distance to similarity score (ChromaDB uses cosine distance)
+                    similarity_score = 1.0 - distance
+                    
+                    # Apply similarity threshold filter
+                    if similarity_score < self.config.similarity_threshold:
+                        continue
+                    
+                    # Calculate confidence score based on similarity and metadata
+                    confidence = min(similarity_score * 1.1, 1.0)  # Slight boost, cap at 1.0
+                    
+                    # Extract email information from metadata
+                    email_id = metadata.get('email_id', 'unknown')
+                    chunk_id = metadata.get('chunk_id', 'unknown')
+                    
+                    # Restore privacy-protected content if needed
+                    content = doc
+                    privacy_tokens = {}
+                    if self.privacy_guardian and metadata.get('privacy_protected', False):
+                        # Extract privacy tokens from metadata
+                        privacy_tokens = {k: v for k, v in metadata.items() 
+                                        if k.startswith('token_') or k.startswith('pii_')}
+                        
+                        # TODO: Implement restore functionality when PrivacyGuardian supports it
+                        # For now, use the protected content as-is
+                        logger.debug(f"Found privacy-protected content, tokens available: {len(privacy_tokens)}")
+                        content = doc
+                    
+                    # Create SearchResult object
+                    search_result = SearchResult(
+                        content=content,
+                        metadata={
+                            "subject": metadata.get('subject', ''),
+                            "sender": metadata.get('sender', ''),
+                            "date": metadata.get('date', ''),
+                            "token_count": metadata.get('token_count', 0),
+                            "chunk_index": metadata.get('chunk_index', 0)
+                        },
+                        similarity_score=similarity_score,
+                        chunk_id=chunk_id,
+                        email_id=email_id,
+                        confidence=confidence,
+                        search_type=search_type,
+                        privacy_tokens=privacy_tokens
+                    )
+                    
+                    results.append(search_result)
+            
+            # Sort by relevance score (combination of similarity and confidence)
+            results.sort(key=lambda x: x.relevance_score, reverse=True)
+            
             processing_time_ms = (time.time() - start_time) * 1000
             self.search_count += 1
             self.total_search_time += processing_time_ms / 1000
             
-            logger.debug(f"Search completed: 0 results for '{query[:50]}...' in {processing_time_ms:.2f}ms")
-            return []
+            # Update processing time for each result
+            for result in results:
+                result.processing_time_ms = processing_time_ms
+            
+            logger.debug(f"Search completed: {len(results)} results for '{query[:50]}...' in {processing_time_ms:.2f}ms")
+            return results
             
         except Exception as e:
             processing_time_ms = (time.time() - start_time) * 1000
