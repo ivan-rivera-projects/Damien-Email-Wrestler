@@ -21,9 +21,9 @@ Performance Targets:
 """
 
 from .chunker import IntelligentChunker, ChunkingStrategy, ChunkMetadata
+from .batch import BatchProcessor, BatchConfig, BatchResult, ProcessingStrategy, BatchStatus, EmailItem, ProcessingResult, BatchProgress
 
 # Planned imports - will be implemented next
-# from .batch import BatchProcessor, BatchConfig, BatchResult
 # from .rag import RAGEngine, SearchResult, VectorStore
 # from .hierarchical import HierarchicalProcessor, ProcessingLevel, AnalysisResult
 # from .tracker import ProgressTracker, ProgressUpdate, OperationStatus
@@ -32,8 +32,11 @@ __all__ = [
     # Chunking (IMPLEMENTED)
     'IntelligentChunker', 'ChunkingStrategy', 'ChunkMetadata',
     
+    # Batch Processing (IMPLEMENTED)
+    'BatchProcessor', 'BatchConfig', 'BatchResult', 'ProcessingStrategy', 
+    'BatchStatus', 'EmailItem', 'ProcessingResult', 'BatchProgress',
+    
     # Planned components
-    # 'BatchProcessor', 'BatchConfig', 'BatchResult',
     # 'RAGEngine', 'SearchResult', 'VectorStore',
     # 'HierarchicalProcessor', 'ProcessingLevel', 'AnalysisResult',
     # 'ProgressTracker', 'ProgressUpdate', 'OperationStatus'
