@@ -29,7 +29,7 @@ tiktoken = "^0.7.0"  # For token counting
 python-json-logger = "^2.0.7" # Added for structured logging
 
 # ML and Data Science Dependencies (Core)
-torch = "2.1.0"  # PyTorch CPU version - compatible with sentence-transformers
+torch = "2.2.2"  # PyTorch CPU version - compatible with sentence-transformers
 sentence-transformers = "2.6.0"  # For sentence embeddings - compatible version  
 numpy = "^1.24.0,<2.0.0"  # Compatible with sentence-transformers and torch
 scikit-learn = "^1.4.0"  # For clustering and ML algorithms
@@ -50,6 +50,8 @@ psutil = "^5.9.0"  # For system monitoring (performance metrics)
 python-dotenv = "^1.1.0"
 tenacity = "^9.1.2"
 anthropic = "^0.52.1"
+chromadb = "^1.0.11"
+protobuf = "<4.0.0"
 
 [tool.poetry.group.dev.dependencies]
 # Development-specific dependencies.
