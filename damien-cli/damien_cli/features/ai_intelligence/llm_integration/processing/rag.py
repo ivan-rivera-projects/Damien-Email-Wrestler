@@ -68,6 +68,9 @@ class RAGConfig:
     embedding_model: str = "all-MiniLM-L6-v2"
     vector_dimension: int = 384
     similarity_threshold: float = 0.3  # Lower threshold for better recall in testing
+    adaptive_threshold: bool = True  # Enable adaptive threshold adjustment
+    hybrid_weight_vector: float = 0.7  # Weight for vector similarity in hybrid search
+    hybrid_weight_keyword: float = 0.3  # Weight for keyword matching in hybrid search
     max_results: int = 10
     enable_caching: bool = True
     cache_ttl_seconds: int = 3600
@@ -433,6 +436,112 @@ class RAGEngine:
                 }]
             )
     
+    def _calculate_adaptive_threshold(self, results_distances: List[float], base_threshold: float) -> float:
+        """Calculate adaptive similarity threshold based on result distribution."""
+        if not results_distances or not self.config.adaptive_threshold:
+            return base_threshold
+        
+        try:
+            # Convert distances to similarities (ChromaDB uses cosine distance)
+            similarities = [1.0 - distance for distance in results_distances]
+            
+            if len(similarities) < 2:
+                return base_threshold * 0.8  # Lower threshold for single results
+            
+            # Calculate statistics
+            import statistics
+            mean_similarity = statistics.mean(similarities)
+            std_similarity = statistics.stdev(similarities) if len(similarities) > 1 else 0
+            
+            # Adaptive threshold strategy:
+            # If there's high variance, be more selective (higher threshold)
+            # If similarities are clustered, be more inclusive (lower threshold)
+            if std_similarity > 0.1:  # High variance
+                adaptive_threshold = max(base_threshold, mean_similarity - std_similarity)
+            else:  # Low variance, results are clustered
+                adaptive_threshold = min(base_threshold * 0.7, mean_similarity - 0.1)
+            
+            # Ensure threshold stays within reasonable bounds
+            adaptive_threshold = max(0.1, min(0.8, adaptive_threshold))
+            
+            logger.debug(f"Adaptive threshold: {adaptive_threshold:.3f} (base: {base_threshold:.3f}, "
+                        f"mean: {mean_similarity:.3f}, std: {std_similarity:.3f})")
+            
+            return adaptive_threshold
+            
+        except Exception as e:
+            logger.debug(f"Failed to calculate adaptive threshold: {e}")
+            return base_threshold
+    
+    def _keyword_score(self, query: str, content: str, metadata: Dict[str, Any]) -> float:
+        """Calculate keyword matching score for hybrid search."""
+        if not query or not content:
+            return 0.0
+        
+        try:
+            # Normalize query and content
+            query_words = set(query.lower().split())
+            content_words = set(content.lower().split())
+            
+            # Also check metadata fields
+            subject = metadata.get('subject', '').lower()
+            sender = metadata.get('sender', '').lower()
+            
+            all_searchable_text = f"{content.lower()} {subject} {sender}".split()
+            content_word_set = set(all_searchable_text)
+            
+            # Calculate different types of matches
+            exact_matches = len(query_words.intersection(content_word_set))
+            partial_matches = 0
+            
+            # Check for partial word matches (substring matching)
+            for query_word in query_words:
+                if len(query_word) > 3:  # Only for longer words
+                    for content_word in content_word_set:
+                        if query_word in content_word or content_word in query_word:
+                            partial_matches += 0.5
+                            break
+            
+            # Calculate keyword score
+            total_matches = exact_matches + partial_matches
+            max_possible_matches = len(query_words)
+            
+            keyword_score = total_matches / max_possible_matches if max_possible_matches > 0 else 0.0
+            
+            # Boost score if matches are found in subject line
+            subject_matches = sum(1 for word in query_words if word in subject)
+            if subject_matches > 0:
+                keyword_score *= (1.0 + 0.3 * subject_matches / len(query_words))
+            
+            # Ensure score stays in [0, 1] range
+            keyword_score = min(1.0, keyword_score)
+            
+            logger.debug(f"Keyword score for '{query}': {keyword_score:.3f} "
+                        f"(exact: {exact_matches}, partial: {partial_matches:.1f})")
+            
+            return keyword_score
+            
+        except Exception as e:
+            logger.debug(f"Failed to calculate keyword score: {e}")
+            return 0.0
+    
+    def _combine_scores(self, vector_score: float, keyword_score: float) -> float:
+        """Combine vector similarity and keyword scores for hybrid search."""
+        # Weighted combination with configurable weights
+        combined_score = (
+            self.config.hybrid_weight_vector * vector_score +
+            self.config.hybrid_weight_keyword * keyword_score
+        )
+        
+        # Apply bonus for high keyword scores (exact matches)
+        if keyword_score > 0.8:
+            combined_score *= 1.1  # 10% bonus for strong keyword matches
+        elif keyword_score > 0.5:
+            combined_score *= 1.05  # 5% bonus for moderate keyword matches
+        
+        # Ensure score stays in [0, 1] range
+        return min(1.0, combined_score)
+    
     async def search(
         self,
         query: str,
@@ -440,7 +549,7 @@ class RAGEngine:
         filters: Optional[Dict[str, Any]] = None,
         search_type: SearchType = SearchType.SEMANTIC
     ) -> List[SearchResult]:
-        """Perform semantic search across indexed emails."""
+        """Perform semantic search across indexed emails with optimization enhancements."""
         if not self._connected:
             raise RuntimeError("RAG engine not initialized. Call initialize() first.")
         
@@ -448,7 +557,7 @@ class RAGEngine:
         start_time = time.time()
         
         try:
-            logger.debug(f"Starting search for query: '{query[:50]}...' with limit: {limit}")
+            logger.debug(f"Starting {search_type.value} search for query: '{query[:50]}...' with limit: {limit}")
             
             if not self._embedding_model_loaded:
                 raise RuntimeError("Embedding model not loaded. Call initialize() first.")
@@ -456,10 +565,13 @@ class RAGEngine:
             # Generate query embedding
             query_embedding = self.embedding_model.encode([query])
             
+            # Increase search limit for better adaptive thresholding and hybrid ranking
+            extended_limit = min(limit * 3, 50)  # Search more results to filter/rank
+            
             # Perform similarity search in ChromaDB
             search_results = self.vector_db.collection.query(
                 query_embeddings=query_embedding.tolist(),
-                n_results=limit,
+                n_results=extended_limit,
                 include=['documents', 'metadatas', 'distances']
             )
             
@@ -471,16 +583,36 @@ class RAGEngine:
                 metadatas = search_results['metadatas'][0] if search_results['metadatas'] else [{}] * len(documents)
                 distances = search_results['distances'][0] if search_results['distances'] else [1.0] * len(documents)
                 
+                # Calculate adaptive threshold if enabled
+                current_threshold = self._calculate_adaptive_threshold(distances, self.config.similarity_threshold)
+                
                 for doc, metadata, distance in zip(documents, metadatas, distances):
                     # Convert distance to similarity score (ChromaDB uses cosine distance)
                     similarity_score = 1.0 - distance
                     
-                    # Apply similarity threshold filter
-                    if similarity_score < self.config.similarity_threshold:
+                    # Apply adaptive similarity threshold filter
+                    if similarity_score < current_threshold:
                         continue
                     
-                    # Calculate confidence score based on similarity and metadata
-                    confidence = min(similarity_score * 1.1, 1.0)  # Slight boost, cap at 1.0
+                    # Calculate keyword score for hybrid search
+                    keyword_score = 0.0
+                    if search_type in [SearchType.KEYWORD, SearchType.HYBRID]:
+                        keyword_score = self._keyword_score(query, doc, metadata)
+                    
+                    # Calculate final confidence score based on search type
+                    if search_type == SearchType.SEMANTIC:
+                        confidence = min(similarity_score * 1.1, 1.0)  # Slight boost, cap at 1.0
+                        final_score = similarity_score
+                    elif search_type == SearchType.KEYWORD:
+                        confidence = min(keyword_score * 1.1, 1.0)
+                        final_score = keyword_score
+                    else:  # HYBRID
+                        confidence = self._combine_scores(similarity_score, keyword_score)
+                        final_score = confidence
+                    
+                    # Filter out very low-confidence hybrid results
+                    if search_type == SearchType.HYBRID and confidence < 0.2:
+                        continue
                     
                     # Extract email information from metadata
                     email_id = metadata.get('email_id', 'unknown')
@@ -507,7 +639,10 @@ class RAGEngine:
                             "sender": metadata.get('sender', ''),
                             "date": metadata.get('date', ''),
                             "token_count": metadata.get('token_count', 0),
-                            "chunk_index": metadata.get('chunk_index', 0)
+                            "chunk_index": metadata.get('chunk_index', 0),
+                            "keyword_score": keyword_score,
+                            "vector_similarity": similarity_score,
+                            "adaptive_threshold": current_threshold
                         },
                         similarity_score=similarity_score,
                         chunk_id=chunk_id,
@@ -519,8 +654,16 @@ class RAGEngine:
                     
                     results.append(search_result)
             
-            # Sort by relevance score (combination of similarity and confidence)
-            results.sort(key=lambda x: x.relevance_score, reverse=True)
+            # Sort by relevance score (which now includes hybrid scoring)
+            if search_type == SearchType.HYBRID:
+                # For hybrid search, sort by combined confidence score
+                results.sort(key=lambda x: x.confidence, reverse=True)
+            else:
+                # For semantic/keyword, sort by relevance score
+                results.sort(key=lambda x: x.relevance_score, reverse=True)
+            
+            # Return top results up to the requested limit
+            results = results[:limit]
             
             processing_time_ms = (time.time() - start_time) * 1000
             self.search_count += 1
@@ -530,7 +673,10 @@ class RAGEngine:
             for result in results:
                 result.processing_time_ms = processing_time_ms
             
-            logger.debug(f"Search completed: {len(results)} results for '{query[:50]}...' in {processing_time_ms:.2f}ms")
+            logger.debug(f"Search completed: {len(results)} results for '{query[:50]}...' "
+                        f"in {processing_time_ms:.2f}ms (type: {search_type.value}, "
+                        f"threshold: {current_threshold:.3f})")
+            
             return results
             
         except Exception as e:
