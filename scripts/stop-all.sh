@@ -44,8 +44,8 @@ stop_service_on_port() {
 
 # Stop services
 echo ""
-stop_service_on_port 8894 "Damien MCP Server"
-stop_service_on_port 8892 "Damien MCP Server (Legacy)"
+#stop_service_on_port 8894 "Damien MCP Server"
+stop_service_on_port 8892 "Damien MCP Server"
 stop_service_on_port 8081 "Smithery Adapter"
 
 # Also look for any npm processes related to our services
