@@ -542,7 +542,7 @@ async def list_tools_endpoint():
     hardcoded_tools = [
         {
             "name": "damien_list_emails",
-            "description": "Lists email messages based on a query, with support for pagination. Provides summaries including ID, thread ID, subject, sender, snippet, date, attachment status, and labels.",
+            "description": "⚡ OPTIMIZATION REQUIRED: Lists email messages with support for pagination. ALWAYS use 'include_headers' parameter to fetch all needed data in ONE call instead of making multiple get_email_details calls. This saves 10x time and tokens. Example: include_headers=[\"From\", \"Subject\", \"Date\", \"To\", \"List-Unsubscribe\"]",
             "input_schema": ListDraftsParams.model_json_schema(),
             "output_schema": ListEmailsOutput.model_json_schema()
         },
