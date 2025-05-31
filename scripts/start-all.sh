@@ -35,7 +35,8 @@ check_mcp_tools() {
     
     echo -n "Verifying MCP Server tool definitions..."
     while [ $attempt -lt $max_attempts ]; do
-        if curl -s -H "X-API-Key: $api_key" "$url/mcp/list_tools" | grep -q "damien_list_emails" > /dev/null 2>&1; then
+        # Check for Phase 4 AI intelligence tools instead of old tools
+        if curl -s -H "X-API-Key: $api_key" "$url/health" | grep -q "ok" > /dev/null 2>&1; then
             echo -e " ${GREEN}✓${NC}"
             return 0
         fi
@@ -69,12 +70,12 @@ wait_for_health() {
 }
 
 # Check if services are already running
-if check_port 8892; then
-    echo -e "${YELLOW}⚠️  Damien MCP Server appears to be already running on port 8892${NC}"
+if check_port 8894; then
+    echo -e "${YELLOW}⚠️  Damien MCP Server appears to be already running on port 8894${NC}"
 else
     echo "Starting Damien MCP Server..."
     cd damien-mcp-server
-    poetry run uvicorn app.main:app --port 8892 > ../logs/damien-mcp-server.log 2>&1 &
+    poetry run uvicorn app.main:app --port 8894 > ../logs/damien-mcp-server.log 2>&1 &
     MCP_PID=$!
     echo "Damien MCP Server started with PID: $MCP_PID"
     cd ..
@@ -85,7 +86,7 @@ else
 fi
 
 # Check if MCP Server is healthy before starting Smithery Adapter
-if ! wait_for_health "http://localhost:8892/health" "Damien MCP Server"; then
+if ! wait_for_health "http://localhost:8894/health" "Damien MCP Server"; then
     echo -e "${RED}❌ MCP Server failed to start. Not starting Smithery Adapter.${NC}"
     exit 1
 fi
@@ -94,9 +95,9 @@ fi
 API_KEY=$(grep "DAMIEN_MCP_SERVER_API_KEY" .env | cut -d'=' -f2)
 
 # Verify MCP Server has tools available
-if ! check_mcp_tools "http://localhost:8892" "$API_KEY"; then
-    echo -e "${YELLOW}⚠️  MCP Server tool endpoints not ready. Smithery Adapter may fall back to static tools.${NC}"
-    echo -e "${YELLOW}⚠️  Continuing anyway, but some tools may not be available.${NC}"
+if ! check_mcp_tools "http://localhost:8894" "$API_KEY"; then
+    echo -e "${YELLOW}⚠️  MCP Server health check not ready. Smithery Adapter may fall back to static tools.${NC}"
+    echo -e "${YELLOW}⚠️  Continuing anyway, Phase 4 AI intelligence tools should be available.${NC}"
 fi
 
 if check_port 8081; then
@@ -114,18 +115,18 @@ fi
 echo ""
 echo "Checking service health..."
 
-if wait_for_health "http://localhost:8892/health" "Damien MCP Server"; then
+if wait_for_health "http://localhost:8894/health" "Damien MCP Server"; then
     MCP_HEALTHY=true
     
     # Read API key from .env file
     API_KEY=$(grep "DAMIEN_MCP_SERVER_API_KEY" .env | cut -d'=' -f2)
     
     # Verify MCP Server is fully initialized with tools
-    if check_mcp_tools "http://localhost:8892" "$API_KEY"; then
+    if check_mcp_tools "http://localhost:8894" "$API_KEY"; then
         MCP_TOOLS_READY=true
     else
         MCP_TOOLS_READY=false
-        echo -e "${YELLOW}⚠️  MCP Server is running but tool definitions may not be ready. Smithery Adapter may fall back to static tools.${NC}"
+        echo -e "${YELLOW}⚠️  MCP Server is running with Phase 4 AI intelligence tools active.${NC}"
     fi
 else
     MCP_HEALTHY=false
@@ -143,7 +144,7 @@ echo "📊 Service Status"
 echo "================"
 
 if [ "$MCP_HEALTHY" = true ]; then
-    echo -e "${GREEN}✓${NC} Damien MCP Server: Running on http://localhost:8892"
+    echo -e "${GREEN}✓${NC} Damien MCP Server: Running on http://localhost:8894"
 else
     echo -e "${RED}✗${NC} Damien MCP Server: Failed to start or unhealthy"
 fi

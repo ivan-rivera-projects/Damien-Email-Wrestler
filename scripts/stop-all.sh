@@ -44,7 +44,8 @@ stop_service_on_port() {
 
 # Stop services
 echo ""
-stop_service_on_port 8892 "Damien MCP Server"
+stop_service_on_port 8894 "Damien MCP Server"
+stop_service_on_port 8892 "Damien MCP Server (Legacy)"
 stop_service_on_port 8081 "Smithery Adapter"
 
 # Also look for any npm processes related to our services
@@ -71,7 +72,9 @@ echo "📊 Service Status"
 echo "================"
 
 # Check if services are still running
-if lsof -ti :8892 > /dev/null 2>&1; then
+if lsof -ti :8894 > /dev/null 2>&1; then
+    echo -e "${RED}✗ Damien MCP Server: Still running on port 8894${NC}"
+elif lsof -ti :8892 > /dev/null 2>&1; then
     echo -e "${RED}✗ Damien MCP Server: Still running on port 8892${NC}"
 else
     echo -e "${GREEN}✓ Damien MCP Server: Stopped${NC}"

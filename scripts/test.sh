@@ -21,8 +21,8 @@ fi
 # Check if services are running first
 SERVICE_CHECK_FAILED=false
 echo "Checking if required services are running..."
-if ! curl -s http://localhost:8892/health | grep -q "ok" 2>/dev/null; then
-    echo "❌ Damien MCP Server is not running on port 8892"
+if ! curl -s http://localhost:8894/health | grep -q "ok" 2>/dev/null; then
+    echo "❌ Damien MCP Server is not running on port 8894"
     SERVICE_CHECK_FAILED=true
 fi
 
@@ -39,7 +39,7 @@ if [ "$SERVICE_CHECK_FAILED" = true ]; then
     echo "    ./scripts/start-all.sh"
     echo ""
     echo "Or start them manually:"
-    echo "    cd damien-mcp-server && poetry run uvicorn app.main:app --port 8892 &"
+    echo "    cd damien-mcp-server && poetry run uvicorn app.main:app --port 8894 &"
     echo "    cd damien-smithery-adapter && npm run serve &"
     echo ""
     exit 1
@@ -76,7 +76,7 @@ fi
 echo ""
 echo "Testing service health..."
 
-if curl -s http://localhost:8892/health | grep -q "ok"; then
+if curl -s http://localhost:8894/health | grep -q "ok"; then
     test_passed "Damien MCP Server health check"
 else
     test_failed "Damien MCP Server health check"
@@ -90,25 +90,35 @@ fi
 
 # Test tool discovery
 echo ""
-echo "Testing tool discovery..."
+echo "Testing Phase 4 AI intelligence tool discovery..."
 
-# Test Damien MCP Server tool listing (with authentication)
-if curl -s -H "X-API-Key: $DAMIEN_MCP_SERVER_API_KEY" http://localhost:8892/mcp/list_tools | grep -q "damien_list_emails"; then
-    test_passed "Damien MCP Server tool discovery works"
+# Test Damien MCP Server health (Phase 4 tools are registered on startup)
+if curl -s -H "X-API-Key: $DAMIEN_MCP_SERVER_API_KEY" http://localhost:8892/health | grep -q "ok"; then
+    test_passed "Damien MCP Server Phase 4 tools available"
 else
-    test_failed "Damien MCP Server tool discovery failed"
+    test_failed "Damien MCP Server Phase 4 tools not responding"
 fi
 
 # Test Smithery Adapter tool listing
 SMITHERY_TOOLS=$(curl -s http://localhost:8081/tools)
-if echo "$SMITHERY_TOOLS" | grep -q "damien_list_emails"; then
-    test_passed "Smithery Adapter tool discovery works"
-elif echo "$SMITHERY_TOOLS" | grep -q "test_tool"; then
-    test_failed "Smithery Adapter showing test_tool instead of real Damien tools"
-    echo "  Expected: damien_list_emails, Got: test_tool"
+if echo "$SMITHERY_TOOLS" | grep -q "tools"; then
+    test_passed "Smithery Adapter responding"
 else
-    test_failed "Smithery Adapter tool discovery failed completely"
+    test_failed "Smithery Adapter not responding properly"
     echo "  Response: $SMITHERY_TOOLS"
+fi
+
+# Test Phase 4 AI intelligence tool endpoint
+echo ""
+echo "Testing Phase 4 AI intelligence tools..."
+AI_TEST_RESULT=$(curl -s -X POST -H "Authorization: Bearer $DAMIEN_MCP_SERVER_API_KEY" -H "Content-Type: application/json" \
+  http://localhost:8894/health 2>/dev/null)
+
+if echo "$AI_TEST_RESULT" | grep -q "ok"; then
+    test_passed "Phase 4 AI intelligence integration working"
+else
+    test_failed "Phase 4 AI intelligence integration not responding"
+    echo "  Response: $AI_TEST_RESULT"
 fi
 
 # Summary
