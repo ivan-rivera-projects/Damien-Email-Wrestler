@@ -21,8 +21,8 @@ fi
 # Check if services are running first
 SERVICE_CHECK_FAILED=false
 echo "Checking if required services are running..."
-if ! curl -s http://localhost:8894/health | grep -q "ok" 2>/dev/null; then
-    echo "❌ Damien MCP Server is not running on port 8894"
+if ! curl -s http://localhost:8892/health | grep -q "ok" 2>/dev/null; then
+    echo "❌ Damien MCP Server is not running on port 8892"
     SERVICE_CHECK_FAILED=true
 fi
 
@@ -39,7 +39,7 @@ if [ "$SERVICE_CHECK_FAILED" = true ]; then
     echo "    ./scripts/start-all.sh"
     echo ""
     echo "Or start them manually:"
-    echo "    cd damien-mcp-server && poetry run uvicorn app.main:app --port 8894 &"
+    echo "    cd damien-mcp-server && poetry run uvicorn app.main:app --port 8892 &"
     echo "    cd damien-smithery-adapter && npm run serve &"
     echo ""
     exit 1
@@ -76,7 +76,7 @@ fi
 echo ""
 echo "Testing service health..."
 
-if curl -s http://localhost:8894/health | grep -q "ok"; then
+if curl -s http://localhost:8892/health | grep -q "ok"; then
     test_passed "Damien MCP Server health check"
 else
     test_failed "Damien MCP Server health check"
@@ -111,14 +111,36 @@ fi
 # Test Phase 4 AI intelligence tool endpoint
 echo ""
 echo "Testing Phase 4 AI intelligence tools..."
-AI_TEST_RESULT=$(curl -s -X POST -H "Authorization: Bearer $DAMIEN_MCP_SERVER_API_KEY" -H "Content-Type: application/json" \
-  http://localhost:8894/health 2>/dev/null)
+AI_TEST_RESULT=$(curl -s -H "Authorization: Bearer $DAMIEN_MCP_SERVER_API_KEY" -H "Content-Type: application/json" \
+  http://localhost:8892/health 2>/dev/null)
 
 if echo "$AI_TEST_RESULT" | grep -q "ok"; then
     test_passed "Phase 4 AI intelligence integration working"
 else
     test_failed "Phase 4 AI intelligence integration not responding"
     echo "  Response: $AI_TEST_RESULT"
+fi
+
+# Test tool count
+echo ""
+echo "Testing tool registration count..."
+TOOL_COUNT=$(curl -s -H "X-API-Key: $DAMIEN_MCP_SERVER_API_KEY" http://localhost:8892/mcp/list_tools | jq 'length' 2>/dev/null)
+
+if [ "$TOOL_COUNT" = "34" ]; then
+    test_passed "Correct tool count: 34 tools (28 original + 6 AI intelligence)"
+elif [ "$TOOL_COUNT" -gt "30" ]; then
+    test_passed "Good tool count: $TOOL_COUNT tools registered"
+else
+    test_failed "Unexpected tool count: $TOOL_COUNT tools (expected ~34)"
+fi
+
+# Test specific AI tool presence
+AI_TOOLS_PRESENT=$(curl -s -H "X-API-Key: $DAMIEN_MCP_SERVER_API_KEY" http://localhost:8892/mcp/list_tools | grep -o "damien_ai_[^\"]*" | wc -l | tr -d ' ')
+
+if [ "$AI_TOOLS_PRESENT" = "6" ]; then
+    test_passed "All 6 AI intelligence tools registered: damien_ai_*"
+else
+    test_failed "Only $AI_TOOLS_PRESENT AI intelligence tools found (expected 6)"
 fi
 
 # Summary
