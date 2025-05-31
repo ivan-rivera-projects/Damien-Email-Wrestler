@@ -138,7 +138,7 @@ AI_INTELLIGENCE_TOOLS = {
         },
         handler="quick_test_handler",
         requires_scopes=["gmail_read"],
-        rate_limit_group="system_test"
+        rate_limit_group="ai_testing"
     ),
     
     "damien_ai_create_rule": ToolDefinition(
@@ -175,8 +175,7 @@ AI_INTELLIGENCE_TOOLS = {
         },
         handler="create_rule_handler",
         requires_scopes=["gmail_modify"],
-        rate_limit_group="rule_creation",
-        confirmation_required=True
+        rate_limit_group="ai_modifications"
     ),
     
     "damien_ai_get_insights": ToolDefinition(
@@ -250,48 +249,42 @@ AI_INTELLIGENCE_TOOLS = {
         },
         handler="optimize_inbox_handler",
         requires_scopes=["gmail_modify"],
-        rate_limit_group="inbox_optimization",
-        confirmation_required=True
+        rate_limit_group="ai_modifications"
     )
 }
 
 
 def register_ai_intelligence_tools():
-    """Register all AI intelligence MCP tools."""
-    logger.info("🚀 Registering AI Intelligence MCP tools...")
+    """Register all AI intelligence tools with the tool registry."""
+    logger.info("🚀 Starting registration of AI intelligence tools...")
     
-    # Register each tool with its handler
-    tool_registry.register_tool(
-        AI_INTELLIGENCE_TOOLS["damien_ai_analyze_emails"],
-        ai_intelligence_tools.damien_ai_analyze_emails
+    # Import the handler functions (CRITICAL FIX)
+    from .ai_intelligence import (
+        analyze_emails_handler,
+        suggest_rules_handler,
+        quick_test_handler,
+        create_rule_handler,
+        get_insights_handler,
+        optimize_inbox_handler
     )
     
-    tool_registry.register_tool(
-        AI_INTELLIGENCE_TOOLS["damien_ai_suggest_rules"],
-        ai_intelligence_tools.damien_ai_suggest_rules
-    )
+    # Map handler names to actual handler functions
+    handlers = {
+        "analyze_emails_handler": analyze_emails_handler,
+        "suggest_rules_handler": suggest_rules_handler,
+        "quick_test_handler": quick_test_handler,
+        "create_rule_handler": create_rule_handler,
+        "get_insights_handler": get_insights_handler,
+        "optimize_inbox_handler": optimize_inbox_handler
+    }
     
-    tool_registry.register_tool(
-        AI_INTELLIGENCE_TOOLS["damien_ai_quick_test"],
-        ai_intelligence_tools.damien_ai_quick_test
-    )
+    # Register each AI intelligence tool with proper handlers
+    for tool_name, tool_def in AI_INTELLIGENCE_TOOLS.items():
+        handler = handlers[tool_def.handler_name]
+        tool_registry.register_tool(tool_def, handler)
+        logger.info(f"✅ Registered {tool_name} with handler {tool_def.handler_name}")
     
-    tool_registry.register_tool(
-        AI_INTELLIGENCE_TOOLS["damien_ai_create_rule"],
-        ai_intelligence_tools.damien_ai_create_rule
-    )
-    
-    tool_registry.register_tool(
-        AI_INTELLIGENCE_TOOLS["damien_ai_get_insights"],
-        ai_intelligence_tools.damien_ai_get_insights
-    )
-    
-    tool_registry.register_tool(
-        AI_INTELLIGENCE_TOOLS["damien_ai_optimize_inbox"],
-        ai_intelligence_tools.damien_ai_optimize_inbox
-    )
-    
-    logger.info(f"✅ Successfully registered {len(AI_INTELLIGENCE_TOOLS)} AI intelligence tools")
+    logger.info(f"✅ Successfully registered {len(AI_INTELLIGENCE_TOOLS)} AI intelligence tools with MCP handlers")
 
 
 # Export for import in main.py

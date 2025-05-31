@@ -358,7 +358,7 @@ async def execute_tool_endpoint(
                     is_error_flag = True
                     error_message = api_response.get("error_message", "Unknown error from damien_delete_emails_permanently tool.")
 
-        # Registry-based Tools (Draft, Settings, and Thread Tools) - Route to tool registry handlers
+        # Registry-based Tools (Draft, Settings, Thread Tools, and AI Intelligence Tools) - Route to tool registry handlers
         elif tool_name in ["damien_create_draft", "damien_update_draft", "damien_send_draft", 
                            "damien_list_drafts", "damien_get_draft_details", "damien_delete_draft",
                            "damien_get_vacation_settings", "damien_update_vacation_settings",
@@ -367,7 +367,10 @@ async def execute_tool_endpoint(
                            # Thread tools added here
                            "damien_list_threads", "damien_get_thread_details",
                            "damien_modify_thread_labels", "damien_trash_thread",
-                           "damien_delete_thread_permanently"]:
+                           "damien_delete_thread_permanently",
+                           # AI Intelligence tools added here (Phase 4)
+                           "damien_ai_analyze_emails", "damien_ai_suggest_rules", "damien_ai_quick_test",
+                           "damien_ai_create_rule", "damien_ai_get_insights", "damien_ai_optimize_inbox"]:
             try:
                 # Import tool registry to get the handler
                 from ..services.tool_registry import tool_registry
@@ -452,11 +455,25 @@ async def execute_tool_endpoint(
     # Try to save context (should not prevent returning the tool response)
     try:
         if not is_error_flag: # Only save context if the tool call itself wasn't an error initially
+            # Helper function to convert floats to strings for DynamoDB compatibility
+            def convert_floats_to_strings(obj):
+                if isinstance(obj, dict):
+                    return {k: convert_floats_to_strings(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [convert_floats_to_strings(item) for item in obj]
+                elif isinstance(obj, float):
+                    return str(obj)  # Convert float to string for DynamoDB
+                else:
+                    return obj
+            
+            # Convert any floats in tool_output_data before saving
+            safe_output_data = convert_floats_to_strings(tool_output_data) if tool_output_data else None
+            
             current_call_context = {
                 "tool_result_id": mcp_response.tool_result_id,
                 "tool_name": tool_name,
                 "input": params_dict,
-                "output_summary": tool_output_data
+                "output_summary": safe_output_data
             }
             new_session_data_to_save = previous_context or {}
             if "interactions" not in new_session_data_to_save: new_session_data_to_save["interactions"] = []

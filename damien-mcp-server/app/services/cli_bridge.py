@@ -352,24 +352,44 @@ class CLIBridge:
     """
     
     def __init__(self):
+        """
+        Initialize CLI Bridge with deferred async setup.
+        
+        🔧 FIXED: No async operations during __init__ to prevent
+        "cannot be called from a running event loop" errors.
+        """
         self.component_manager = ComponentManager()
         self.performance_metrics: List[PerformanceMetrics] = []
         self.initialized = False
+        self._initialization_lock = asyncio.Lock()
         
-        # Initialize components asynchronously
-        asyncio.create_task(self._initialize())
+        logger.info("🌉 CLI Bridge created (async initialization pending)")
     
-    async def _initialize(self):
-        """Initialize the bridge and all components."""
-        try:
-            self.initialized = await self.component_manager.initialize_all()
-            if self.initialized:
-                logger.info("🎉 CLI Bridge fully operational")
-            else:
-                logger.warning("⚠️ CLI Bridge operating in degraded mode")
-        except Exception as e:
-            logger.error(f"❌ CLI Bridge initialization failed: {e}")
-            self.initialized = False
+    async def ensure_initialized(self):
+        """
+        Ensure CLI Bridge is properly initialized with async components.
+        
+        🔧 FIXED: Lazy initialization pattern that safely handles async setup
+        without blocking during server startup.
+        """
+        if self.initialized:
+            return
+            
+        async with self._initialization_lock:
+            if self.initialized:  # Double-check pattern
+                return
+                
+            try:
+                self.initialized = await self.component_manager.initialize_all()
+                if self.initialized:
+                    logger.info("✅ CLI Bridge fully operational")
+                else:
+                    logger.warning("⚠️ CLI Bridge operating in degraded mode")
+                    
+            except Exception as e:
+                logger.error(f"❌ CLI Bridge initialization failed: {e}")
+                self.initialized = False
+                raise RuntimeError(f"Failed to initialize CLI Bridge: {e}")
     
     def _record_performance(self, metrics: PerformanceMetrics):
         """Record performance metrics."""

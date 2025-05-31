@@ -31,10 +31,27 @@ class AIIntelligenceTools:
     """MCP tools for AI intelligence capabilities."""
     
     def __init__(self):
-        self.cli_bridge = CLIBridge()
-        self.async_processor = AsyncTaskProcessor()
-        self.progress_tracker = ProgressTracker()
-        logger.info("AI Intelligence MCP tools initialized")
+        """
+        Initialize AI Intelligence tools with direct object creation.
+        
+        🔧 FIXED: Reverted from lazy loading to direct initialization
+        to ensure handlers get proper objects during registration.
+        """
+        try:
+            # Direct initialization - NO lazy loading
+            self.cli_bridge = CLIBridge()
+            self.async_processor = AsyncTaskProcessor()
+            self.progress_tracker = ProgressTracker()
+            
+            logger.info("✅ AI Intelligence MCP tools initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize AI Intelligence tools: {e}")
+            # Create fallback objects to prevent registration failures
+            self.cli_bridge = None
+            self.async_processor = None
+            self.progress_tracker = None
+            raise
     
     async def damien_ai_analyze_emails(
         self,
@@ -55,113 +72,76 @@ class AIIntelligenceTools:
         - Multi-algorithm pattern detection (8+ types)
         - Executive-ready reporting and visualizations
         """
+        # Ensure CLI bridge is properly initialized
+        if self.cli_bridge:
+            await self.cli_bridge.ensure_initialized()
+        
         start_time = time.time()
         
         try:
-            logger.info(f"Starting email analysis: {days} days, {max_emails} max emails")
-            
-            # Create progress tracking
+            # Create an async operation for tracking
             operation = self.progress_tracker.create_operation(
-                name="Email Analysis",
-                total_items=max_emails,
-                steps=[
-                    ("fetch", "Fetching Emails", "Retrieving emails from Gmail"),
-                    ("analyze", "AI Analysis", "Performing intelligent analysis"),
-                    ("patterns", "Pattern Detection", "Detecting email patterns"),
-                    ("insights", "Generate Insights", "Creating insights and recommendations")
-                ]
+                operation_id=f"email_analysis_{int(time.time())}",
+                total_steps=4,
+                description="AI Email Analysis"
             )
-            operation.start()
             
-            # Step 1: Fetch emails
+            # Step 1: Fetch emails from Gmail
             operation.update_progress(message="Fetching emails from Gmail...")
-            emails = await self.cli_bridge.fetch_recent_emails(
+            emails_result = await self.cli_bridge.fetch_emails(
                 days=days,
-                max_count=max_emails,
+                max_emails=max_emails,
                 query=query
             )
-            operation.advance_step(f"Fetched {len(emails)} emails")
+            operation.advance_step("Emails fetched")
             
-            # Step 2: AI Analysis
-            operation.update_progress(message="Performing AI analysis...")
-            analysis_result = await self.cli_bridge.analyze_emails_with_ai(
-                emails=emails,
-                min_confidence=min_confidence,
-                include_patterns=not patterns_only
+            # Step 2: Generate embeddings and analyze patterns
+            operation.update_progress(message="Analyzing email patterns...")
+            analysis_result = await self.cli_bridge.analyze_email_patterns(
+                emails=emails_result.get("emails", []),
+                min_confidence=min_confidence
             )
-            operation.advance_step("AI analysis completed")
+            operation.advance_step("Pattern analysis completed")
             
-            # Step 3: Pattern Detection
-            operation.update_progress(message="Detecting patterns...")
-            patterns = await self.cli_bridge.detect_email_patterns(
-                emails=emails,
-                analysis_result=analysis_result
+            # Step 3: Generate business insights
+            operation.update_progress(message="Generating business insights...")
+            insights_result = await self.cli_bridge.generate_business_insights(
+                analysis_data=analysis_result,
+                output_format=output_format
             )
-            operation.advance_step(f"Detected {len(patterns)} patterns")
+            operation.advance_step("Business insights generated")
             
-            # Step 4: Generate insights
-            operation.update_progress(message="Generating insights...")
-            insights = await self.cli_bridge.generate_insights(
-                emails=emails,
-                patterns=patterns,
-                analysis_result=analysis_result
-            )
-            operation.complete("Analysis completed successfully")
+            # Step 4: Compile final results
+            operation.update_progress(message="Compiling final results...")
             
             processing_time = time.time() - start_time
             
-            # Format response based on output_format
-            if output_format == "summary":
-                return {
+            final_result = {
+                "status": "success",
+                "emails_analyzed": len(emails_result.get("emails", [])),
+                "patterns_detected": len(analysis_result.get("patterns", [])),
+                "insights": insights_result,
+                "processing_time_seconds": round(processing_time, 2),
+                "parameters": {
+                    "days": days,
+                    "max_emails": max_emails,
+                    "min_confidence": min_confidence,
+                    "output_format": output_format,
+                    "query": query,
+                    "patterns_only": patterns_only
+                }
+            }
+            
+            if patterns_only:
+                final_result = {
                     "status": "success",
-                    "summary": {
-                        "emails_analyzed": len(emails),
-                        "patterns_detected": len(patterns),
-                        "processing_time_seconds": round(processing_time, 2),
-                        "confidence_threshold": min_confidence,
-                        "key_insights": insights.get("summary", [])[:5]
-                    },
-                    "recommendations": insights.get("recommendations", [])[:3],
-                    "business_impact": {
-                        "automation_potential": f"{insights.get('automation_rate', 0):.1f}%",
-                        "time_savings_estimate": f"{insights.get('time_savings_hours', 0):.1f} hours/week"
-                    }
+                    "patterns": analysis_result.get("patterns", []),
+                    "processing_time_seconds": round(processing_time, 2)
                 }
             
-            elif output_format == "detailed":
-                return {
-                    "status": "success",
-                    "analysis": {
-                        "emails_analyzed": len(emails),
-                        "patterns_detected": len(patterns),
-                        "processing_time_seconds": round(processing_time, 2),
-                        "confidence_threshold": min_confidence
-                    },
-                    "patterns": patterns,
-                    "insights": insights,
-                    "performance_metrics": {
-                        "throughput_emails_per_second": len(emails) / processing_time if processing_time > 0 else 0,
-                        "average_confidence": analysis_result.get("average_confidence", 0),
-                        "pattern_accuracy": analysis_result.get("pattern_accuracy", 0)
-                    }
-                }
+            operation.complete("Email analysis completed successfully")
+            return final_result
             
-            else:  # json format
-                return {
-                    "status": "success",
-                    "data": {
-                        "emails": [email.to_dict() for email in emails] if hasattr(emails[0], 'to_dict') else emails,
-                        "patterns": patterns,
-                        "analysis": analysis_result,
-                        "insights": insights,
-                        "metadata": {
-                            "processing_time": processing_time,
-                            "email_count": len(emails),
-                            "pattern_count": len(patterns)
-                        }
-                    }
-                }
-                
         except Exception as e:
             logger.error(f"Email analysis failed: {e}")
             return {
@@ -188,79 +168,45 @@ class AIIntelligenceTools:
         - Rule complexity analysis and optimization
         - Integration with existing Damien rule system
         """
+        # Ensure CLI bridge is properly initialized
+        if self.cli_bridge:
+            await self.cli_bridge.ensure_initialized()
+        
         start_time = time.time()
         
         try:
-            logger.info(f"Generating rule suggestions: limit={limit}, confidence={min_confidence}")
-            
-            # Create progress tracking
-            operation = self.progress_tracker.create_operation(
-                name="Rule Suggestion Generation",
-                steps=[
-                    ("analyze", "Pattern Analysis", "Analyzing email patterns"),
-                    ("generate", "Rule Generation", "Generating intelligent rules"),
-                    ("validate", "Rule Validation", "Validating rule effectiveness"),
-                    ("impact", "Business Impact", "Calculating business impact")
-                ]
-            )
-            operation.start()
-            
-            # Step 1: Analyze patterns
-            operation.update_progress(message="Analyzing email patterns...")
-            pattern_analysis = await self.cli_bridge.analyze_patterns_for_rules(
-                categories=categories,
-                min_confidence=min_confidence
-            )
-            operation.advance_step("Pattern analysis completed")
-            
-            # Step 2: Generate rules
-            operation.update_progress(message="Generating intelligent rules...")
-            rule_suggestions = await self.cli_bridge.generate_rule_suggestions(
-                patterns=pattern_analysis,
+            # Generate rule suggestions using ML analysis
+            suggestions_result = await self.cli_bridge.generate_rule_suggestions(
                 limit=limit,
-                min_confidence=min_confidence
+                min_confidence=min_confidence,
+                categories=categories,
+                include_business_impact=include_business_impact
             )
-            operation.advance_step(f"Generated {len(rule_suggestions)} rule suggestions")
             
-            # Step 3: Validate rules (if enabled)
+            # Auto-validate suggestions if requested
             if auto_validate:
-                operation.update_progress(message="Validating rule effectiveness...")
-                validation_results = await self.cli_bridge.validate_rule_suggestions(
-                    rule_suggestions=rule_suggestions
+                validation_result = await self.cli_bridge.validate_rule_suggestions(
+                    suggestions=suggestions_result.get("suggestions", [])
                 )
-                operation.advance_step("Rule validation completed")
-            else:
-                validation_results = {"skipped": True}
-            
-            # Step 4: Calculate business impact (if enabled)
-            if include_business_impact:
-                operation.update_progress(message="Calculating business impact...")
-                business_impact = await self.cli_bridge.calculate_rule_business_impact(
-                    rule_suggestions=rule_suggestions
-                )
-                operation.advance_step("Business impact calculated")
-            else:
-                business_impact = {"skipped": True}
-            
-            operation.complete("Rule suggestions generated successfully")
+                suggestions_result["validation"] = validation_result
             
             processing_time = time.time() - start_time
             
             return {
                 "status": "success",
-                "suggestions": rule_suggestions,
-                "validation": validation_results,
-                "business_impact": business_impact,
+                "suggestions": suggestions_result.get("suggestions", []),
+                "validation": suggestions_result.get("validation", {}),
                 "metadata": {
-                    "suggestions_count": len(rule_suggestions),
+                    "total_suggestions": len(suggestions_result.get("suggestions", [])),
+                    "high_confidence_count": len([s for s in suggestions_result.get("suggestions", []) 
+                                                if s.get("confidence", 0) >= 0.9]),
                     "processing_time_seconds": round(processing_time, 2),
-                    "confidence_threshold": min_confidence,
-                    "categories_analyzed": categories or "all"
-                },
-                "summary": {
-                    "total_suggestions": len(rule_suggestions),
-                    "high_confidence_count": len([r for r in rule_suggestions if r.get("confidence", 0) >= 0.9]),
-                    "estimated_time_savings": business_impact.get("total_time_savings_hours", 0) if include_business_impact else "not_calculated"
+                    "parameters": {
+                        "limit": limit,
+                        "min_confidence": min_confidence,
+                        "categories": categories,
+                        "include_business_impact": include_business_impact
+                    }
                 }
             }
             
@@ -288,69 +234,60 @@ class AIIntelligenceTools:
         - Sample data analysis with confidence metrics
         - System readiness assessment for production
         """
+        # Ensure CLI bridge is properly initialized
+        if self.cli_bridge:
+            await self.cli_bridge.ensure_initialized()
+        
         start_time = time.time()
         
         try:
-            logger.info(f"Running AI integration quick test: {sample_size} samples, {days} days")
+            test_results = {}
             
-            # Test results collector
-            test_results = {
-                "component_tests": {},
-                "performance_tests": {},
-                "integration_tests": {}
-            }
-            
-            # Component validation tests
+            # Component validation
             if validate_components:
-                component_results = await self.cli_bridge.validate_ai_components()
-                test_results["component_tests"] = component_results
+                component_tests = await self.cli_bridge.validate_ai_components()
+                test_results["component_tests"] = component_tests
             
-            # Performance tests
+            # Performance benchmarking
             if include_performance:
-                performance_results = await self.cli_bridge.run_performance_tests(
-                    sample_size=sample_size
+                performance_tests = await self.cli_bridge.run_performance_tests(
+                    sample_size=sample_size,
+                    days=days
                 )
-                test_results["performance_tests"] = performance_results
+                test_results["performance_tests"] = performance_tests
             
-            # Integration test with sample data
-            sample_emails = await self.cli_bridge.fetch_recent_emails(
-                days=days,
-                max_count=sample_size
+            # Quick integration test
+            integration_tests = await self.cli_bridge.run_integration_tests(
+                sample_size=min(sample_size, 10)
             )
-            
-            if sample_emails:
-                # Quick analysis test
-                quick_analysis = await self.cli_bridge.quick_analyze_emails(sample_emails)
-                test_results["integration_tests"]["sample_analysis"] = quick_analysis
-                
-                # Quick search test
-                search_test = await self.cli_bridge.test_search_functionality(sample_emails)
-                test_results["integration_tests"]["search_test"] = search_test
-            
-            processing_time = time.time() - start_time
+            test_results["integration_tests"] = integration_tests
             
             # Calculate overall health score
             health_score = self._calculate_health_score(test_results)
             
+            # Generate recommendations
+            recommendations = self._generate_test_recommendations(test_results, health_score)
+            
+            processing_time = time.time() - start_time
+            
             return {
                 "status": "success",
-                "health_score": health_score,
+                "health_score": round(health_score, 2),
                 "test_results": test_results,
+                "recommendations": recommendations,
                 "summary": {
-                    "total_tests_run": len([t for category in test_results.values() for t in category.keys()]),
-                    "processing_time_seconds": round(processing_time, 2),
-                    "sample_size": len(sample_emails) if sample_emails else 0,
-                    "components_validated": validate_components,
-                    "performance_tested": include_performance,
-                    "system_ready": health_score >= 0.8
-                },
-                "recommendations": self._generate_test_recommendations(test_results, health_score)
+                    "overall_health": "excellent" if health_score >= 0.9 else "good" if health_score >= 0.7 else "needs_attention",
+                    "components_tested": len(test_results.get("component_tests", {})),
+                    "performance_benchmarks": len(test_results.get("performance_tests", {})),
+                    "integration_checks": len(test_results.get("integration_tests", {})),
+                    "processing_time_seconds": round(processing_time, 2)
+                }
             }
             
         except Exception as e:
             logger.error(f"Quick test failed: {e}")
             return {
-                "status": "error", 
+                "status": "error",
                 "error": str(e),
                 "processing_time_seconds": time.time() - start_time
             }
@@ -371,50 +308,67 @@ class AIIntelligenceTools:
         - Validation against existing rules for conflicts
         - Preview and confirmation before implementation
         """
+        # Ensure CLI bridge is properly initialized
+        if self.cli_bridge:
+            await self.cli_bridge.ensure_initialized()
+        
         start_time = time.time()
         
         try:
-            logger.info(f"Creating rule from description: '{rule_description[:50]}...'")
-            
-            # Parse natural language description
-            parsed_rule = await self.cli_bridge.parse_natural_language_rule(
-                description=rule_description
+            # Parse natural language rule description
+            parsing_result = await self.cli_bridge.parse_rule_description(
+                description=rule_description,
+                confidence_threshold=confidence_threshold
             )
             
-            # Validate rule if requested
-            validation_result = None
-            if validate_before_create:
-                validation_result = await self.cli_bridge.validate_rule_before_creation(
-                    parsed_rule=parsed_rule,
-                    confidence_threshold=confidence_threshold
-                )
-            
-            # Create rule (or dry run)
-            if dry_run:
-                creation_result = {
-                    "dry_run": True,
-                    "would_create": parsed_rule,
-                    "estimated_impact": await self.cli_bridge.estimate_rule_impact(parsed_rule)
+            if parsing_result.get("confidence", 0) < confidence_threshold:
+                return {
+                    "status": "low_confidence",
+                    "confidence": parsing_result.get("confidence", 0),
+                    "parsed_rule": parsing_result.get("rule", {}),
+                    "message": f"Rule parsing confidence ({parsing_result.get('confidence', 0):.2f}) below threshold ({confidence_threshold})",
+                    "suggestions": parsing_result.get("suggestions", [])
                 }
+            
+            # Validate rule before creation
+            if validate_before_create:
+                validation_result = await self.cli_bridge.validate_rule_creation(
+                    rule=parsing_result.get("rule", {}),
+                    check_conflicts=True
+                )
+                
+                if not validation_result.get("valid", False):
+                    return {
+                        "status": "validation_failed",
+                        "validation_errors": validation_result.get("errors", []),
+                        "parsed_rule": parsing_result.get("rule", {}),
+                        "suggestions": validation_result.get("suggestions", [])
+                    }
+            
+            # Create rule (or simulate if dry run)
+            if dry_run:
+                creation_result = await self.cli_bridge.simulate_rule_creation(
+                    rule=parsing_result.get("rule", {})
+                )
+                status = "dry_run_success"
             else:
                 creation_result = await self.cli_bridge.create_email_rule(
-                    parsed_rule=parsed_rule
+                    rule=parsing_result.get("rule", {})
                 )
+                status = "created"
             
             processing_time = time.time() - start_time
             
             return {
-                "status": "success",
-                "rule_created": not dry_run,
-                "dry_run": dry_run,
-                "parsed_rule": parsed_rule,
-                "validation": validation_result,
+                "status": status,
+                "rule": parsing_result.get("rule", {}),
                 "creation_result": creation_result,
+                "confidence": parsing_result.get("confidence", 0),
                 "metadata": {
                     "original_description": rule_description,
-                    "processing_time_seconds": round(processing_time, 2),
-                    "confidence_threshold": confidence_threshold,
-                    "validation_performed": validate_before_create
+                    "dry_run": dry_run,
+                    "validated": validate_before_create,
+                    "processing_time_seconds": round(processing_time, 2)
                 }
             }
             
@@ -423,7 +377,6 @@ class AIIntelligenceTools:
             return {
                 "status": "error",
                 "error": str(e),
-                "original_description": rule_description,
                 "processing_time_seconds": time.time() - start_time
             }
     
@@ -443,40 +396,33 @@ class AIIntelligenceTools:
         - Pattern evolution tracking over time
         - Business intelligence reporting
         """
+        # Ensure CLI bridge is properly initialized
+        if self.cli_bridge:
+            await self.cli_bridge.ensure_initialized()
+        
         start_time = time.time()
         
         try:
-            logger.info(f"Generating insights: type={insight_type}, range={time_range} days")
-            
             # Generate insights based on type
-            if insight_type == "trends":
-                insights_data = await self.cli_bridge.analyze_email_trends(
-                    days=time_range,
-                    include_predictions=include_predictions
+            insights_result = await self.cli_bridge.generate_email_insights(
+                insight_type=insight_type,
+                time_range=time_range,
+                include_predictions=include_predictions
+            )
+            
+            # Format results according to requested format
+            if format == "json":
+                formatted_insights = insights_result
+            elif format == "chart_data":
+                formatted_insights = await self.cli_bridge.format_insights_for_charts(
+                    insights=insights_result
                 )
-            elif insight_type == "patterns":
-                insights_data = await self.cli_bridge.analyze_email_patterns(
-                    days=time_range
-                )
-            elif insight_type == "efficiency":
-                insights_data = await self.cli_bridge.analyze_email_efficiency(
-                    days=time_range
-                )
-            else:  # summary
-                insights_data = await self.cli_bridge.generate_summary_insights(
-                    days=time_range,
-                    include_predictions=include_predictions
+            else:  # text format
+                formatted_insights = await self.cli_bridge.format_insights_as_text(
+                    insights=insights_result
                 )
             
             processing_time = time.time() - start_time
-            
-            # Format response based on format preference
-            if format == "text":
-                formatted_insights = await self.cli_bridge.format_insights_as_text(insights_data)
-            elif format == "chart_data":
-                formatted_insights = await self.cli_bridge.format_insights_as_chart_data(insights_data)
-            else:  # json
-                formatted_insights = insights_data
             
             return {
                 "status": "success",
@@ -485,9 +431,9 @@ class AIIntelligenceTools:
                 "metadata": {
                     "time_range_days": time_range,
                     "format": format,
-                    "include_predictions": include_predictions,
-                    "processing_time_seconds": round(processing_time, 2),
-                    "data_points_analyzed": insights_data.get("data_points", 0)
+                    "includes_predictions": include_predictions,
+                    "generated_at": datetime.now().isoformat(),
+                    "processing_time_seconds": round(processing_time, 2)
                 }
             }
             
@@ -496,19 +442,18 @@ class AIIntelligenceTools:
             return {
                 "status": "error",
                 "error": str(e),
-                "insight_type": insight_type,
                 "processing_time_seconds": time.time() - start_time
             }
     
     async def damien_ai_optimize_inbox(
         self,
-        optimization_type: Literal["declutter", "organize", "automate", "all"] = "all", 
+        optimization_type: Literal["declutter", "organize", "automate", "all"] = "all",
         aggressiveness: Literal["conservative", "moderate", "aggressive"] = "moderate",
         dry_run: bool = True,
         max_actions: int = 100
     ) -> Dict[str, Any]:
         """
-        AI-powered inbox optimization and management.
+        AI-powered inbox optimization with multi-strategy algorithms.
         
         Advanced features:
         - Multi-strategy optimization algorithms
@@ -516,37 +461,36 @@ class AIIntelligenceTools:
         - Batch processing with progress tracking
         - Rollback capabilities for all operations
         """
+        # Ensure CLI bridge is properly initialized
+        if self.cli_bridge:
+            await self.cli_bridge.ensure_initialized()
+        
         start_time = time.time()
         
         try:
-            logger.info(f"Optimizing inbox: type={optimization_type}, aggressiveness={aggressiveness}")
-            
-            # Create progress tracking
+            # Create an async operation for tracking
             operation = self.progress_tracker.create_operation(
-                name="Inbox Optimization",
-                steps=[
-                    ("analyze", "Inbox Analysis", "Analyzing current inbox state"),
-                    ("plan", "Optimization Planning", "Creating optimization plan"),
-                    ("execute", "Execute Changes", "Applying optimizations"),
-                    ("verify", "Verification", "Verifying optimization results")
-                ]
+                operation_id=f"inbox_optimization_{int(time.time())}",
+                total_steps=4,
+                description="AI Inbox Optimization"
             )
-            operation.start()
             
             # Step 1: Analyze current inbox state
-            operation.update_progress(message="Analyzing inbox...")
-            inbox_analysis = await self.cli_bridge.analyze_inbox_state()
+            operation.update_progress(message="Analyzing current inbox state...")
+            inbox_analysis = await self.cli_bridge.analyze_inbox_state(
+                include_metrics=True
+            )
             operation.advance_step("Inbox analysis completed")
             
-            # Step 2: Create optimization plan
-            operation.update_progress(message="Creating optimization plan...")
-            optimization_plan = await self.cli_bridge.create_optimization_plan(
-                analysis=inbox_analysis,
+            # Step 2: Generate optimization plan
+            operation.update_progress(message="Generating optimization plan...")
+            optimization_plan = await self.cli_bridge.generate_optimization_plan(
+                inbox_analysis=inbox_analysis,
                 optimization_type=optimization_type,
                 aggressiveness=aggressiveness,
                 max_actions=max_actions
             )
-            operation.advance_step(f"Plan created with {len(optimization_plan.get('actions', []))} actions")
+            operation.advance_step("Optimization plan generated")
             
             # Step 3: Execute optimizations (or dry run)
             if dry_run:
@@ -645,3 +589,137 @@ class AIIntelligenceTools:
 
 # Export the tools class for MCP server integration
 ai_intelligence_tools = AIIntelligenceTools()
+
+
+# =============================================================================
+# MCP Handler Functions (CRITICAL FIX - PHASE 4)
+# =============================================================================
+
+async def analyze_emails_handler(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """MCP handler for AI email analysis."""
+    try:
+        result = await ai_intelligence_tools.damien_ai_analyze_emails(
+            days=params.get('days', 30),
+            max_emails=params.get('max_emails', 500),
+            min_confidence=params.get('min_confidence', 0.7),
+            output_format=params.get('output_format', 'summary'),
+            query=params.get('query'),
+            patterns_only=params.get('patterns_only', False)
+        )
+        return {
+            "success": True,
+            "data": {**result, "user_context": context}
+        }
+    except Exception as e:
+        logger.error(f"Error in analyze_emails_handler: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "error_message": f"Email analysis failed: {str(e)}",
+            "data": None
+        }
+
+async def suggest_rules_handler(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """MCP handler for AI rule suggestions."""
+    try:
+        result = await ai_intelligence_tools.damien_ai_suggest_rules(
+            limit=params.get('limit', 5),
+            min_confidence=params.get('min_confidence', 0.8),
+            categories=params.get('categories'),
+            include_business_impact=params.get('include_business_impact', True),
+            auto_validate=params.get('auto_validate', True)
+        )
+        return {
+            "success": True,
+            "data": {**result, "user_context": context}
+        }
+    except Exception as e:
+        logger.error(f"Error in suggest_rules_handler: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "error_message": f"Rule suggestion failed: {str(e)}",
+            "data": None
+        }
+
+async def quick_test_handler(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """MCP handler for AI quick test."""
+    try:
+        result = await ai_intelligence_tools.damien_ai_quick_test(
+            sample_size=params.get('sample_size', 50),
+            days=params.get('days', 7),
+            include_performance=params.get('include_performance', True),
+            validate_components=params.get('validate_components', True)
+        )
+        return {
+            "success": True,
+            "data": {**result, "user_context": context}
+        }
+    except Exception as e:
+        logger.error(f"Error in quick_test_handler: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "error_message": f"Quick test failed: {str(e)}",
+            "data": None
+        }
+
+async def create_rule_handler(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """MCP handler for AI rule creation."""
+    try:
+        result = await ai_intelligence_tools.damien_ai_create_rule(
+            rule_description=params.get('rule_description'),
+            validate_before_create=params.get('validate_before_create', True),
+            dry_run=params.get('dry_run', False),
+            confidence_threshold=params.get('confidence_threshold', 0.8)
+        )
+        return {
+            "success": True,
+            "data": {**result, "user_context": context}
+        }
+    except Exception as e:
+        logger.error(f"Error in create_rule_handler: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "error_message": f"Rule creation failed: {str(e)}",
+            "data": None
+        }
+
+async def get_insights_handler(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """MCP handler for AI insights."""
+    try:
+        result = await ai_intelligence_tools.damien_ai_get_insights(
+            insight_type=params.get('insight_type', 'summary'),
+            time_range=params.get('time_range', 30),
+            include_predictions=params.get('include_predictions', False),
+            format=params.get('format', 'text')
+        )
+        return {
+            "success": True,
+            "data": {**result, "user_context": context}
+        }
+    except Exception as e:
+        logger.error(f"Error in get_insights_handler: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "error_message": f"Insights generation failed: {str(e)}",
+            "data": None
+        }
+
+async def optimize_inbox_handler(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """MCP handler for AI inbox optimization."""
+    try:
+        result = await ai_intelligence_tools.damien_ai_optimize_inbox(
+            optimization_type=params.get('optimization_type', 'all'),
+            aggressiveness=params.get('aggressiveness', 'moderate'),
+            dry_run=params.get('dry_run', True),
+            max_actions=params.get('max_actions', 100)
+        )
+        return {
+            "success": True,
+            "data": {**result, "user_context": context}
+        }
+    except Exception as e:
+        logger.error(f"Error in optimize_inbox_handler: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "error_message": f"Inbox optimization failed: {str(e)}",
+            "data": None
+        }
