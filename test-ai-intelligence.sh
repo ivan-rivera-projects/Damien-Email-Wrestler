@@ -144,21 +144,21 @@ make_api_call() {
     
     # Check if response indicates success
     local success
-    success=$(echo "$response" | jq -r '.success // false' 2>/dev/null || echo "false")
+    success=$(echo "$response" | jq -r '.output.success // .success // false' 2>/dev/null || echo "false")
     
     if [[ "$success" == "true" ]]; then
         print_success "$description - SUCCESS"
         
         # Extract and display key information
         local key_info
-        key_info=$(echo "$response" | jq -r '.data // {}' 2>/dev/null)
+        key_info=$(echo "$response" | jq -r '.output.data // .data // {}' 2>/dev/null)
         if [[ "$key_info" != "{}" ]] && [[ "$key_info" != "null" ]]; then
             echo "$key_info" | jq '.' 2>/dev/null | head -10 || echo "$key_info" | head -10
         fi
         return 0
     else
         local error_msg
-        error_msg=$(echo "$response" | jq -r '.error_message // .detail // "Unknown error"' 2>/dev/null || echo "Unknown error")
+        error_msg=$(echo "$response" | jq -r '.output.data.error // .error_message // .detail // "Unknown error"' 2>/dev/null || echo "Unknown error")
         print_error "$description - FAILED: $error_msg"
         return 1
     fi
