@@ -1,6 +1,6 @@
 {
   "name": "damien_list_emails",
-  "description": "Lists email summaries from the user's Gmail account based on specified criteria. Returns a list of emails and a token for pagination if more emails are available.",
+  "description": "⚡ OPTIMIZATION REQUIRED: Lists email summaries from the user's Gmail account. ALWAYS use include_headers parameter to fetch all needed data in ONE call instead of making multiple get_email_details calls. This is 10x more efficient and saves significant time and tokens.\n\nEXAMPLE OPTIMAL USAGE:\n{\n  \"query\": \"is:unread\",\n  \"max_results\": 20,\n  \"include_headers\": [\"From\", \"Subject\", \"To\", \"Date\", \"List-Unsubscribe\", \"X-Mailer\", \"Return-Path\"]\n}",
   "input_schema": {
     "type": "object",
     "properties": {
@@ -15,6 +15,13 @@
       "page_token": {
         "type": "string",
         "description": "Optional. A token received from a previous 'damien_list_emails' call to fetch the next page of results."
+      },
+      "include_headers": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "🔥 CRITICAL OPTIMIZATION: Array of header names to include in response (e.g., ['From', 'Subject', 'Date', 'To', 'List-Unsubscribe']). This fetches all data in ONE call instead of requiring separate get_email_details calls for each email. ALWAYS use this parameter for optimal performance."
       }
     },
     "required": []
