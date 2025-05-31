@@ -81,38 +81,38 @@ class AIIntelligenceTools:
         try:
             # Create an async operation for tracking
             operation = self.progress_tracker.create_operation(
-                operation_id=f"email_analysis_{int(time.time())}",
-                total_steps=4,
-                description="AI Email Analysis"
+                name="AI Email Analysis",
+                total_items=4,
+                operation_id=f"email_analysis_{int(time.time())}"
             )
             
             # Step 1: Fetch emails from Gmail
-            operation.update_progress(message="Fetching emails from Gmail...")
+            self.progress_tracker.update_progress(operation.operation_id, message="Fetching emails from Gmail...")
             emails_result = await self.cli_bridge.fetch_emails(
                 days=days,
                 max_emails=max_emails,
                 query=query
             )
-            operation.advance_step("Emails fetched")
+            self.progress_tracker.advance_step(operation.operation_id, "Emails fetched")
             
             # Step 2: Generate embeddings and analyze patterns
-            operation.update_progress(message="Analyzing email patterns...")
+            self.progress_tracker.update_progress(operation.operation_id, message="Analyzing email patterns...")
             analysis_result = await self.cli_bridge.analyze_email_patterns(
                 emails=emails_result.get("emails", []),
                 min_confidence=min_confidence
             )
-            operation.advance_step("Pattern analysis completed")
+            self.progress_tracker.advance_step(operation.operation_id, "Pattern analysis completed")
             
             # Step 3: Generate business insights
-            operation.update_progress(message="Generating business insights...")
+            self.progress_tracker.update_progress(operation.operation_id, message="Generating business insights...")
             insights_result = await self.cli_bridge.generate_business_insights(
                 analysis_data=analysis_result,
                 output_format=output_format
             )
-            operation.advance_step("Business insights generated")
+            self.progress_tracker.advance_step(operation.operation_id, "Business insights generated")
             
             # Step 4: Compile final results
-            operation.update_progress(message="Compiling final results...")
+            self.progress_tracker.update_progress(operation.operation_id, message="Compiling final results...")
             
             processing_time = time.time() - start_time
             
@@ -139,7 +139,7 @@ class AIIntelligenceTools:
                     "processing_time_seconds": round(processing_time, 2)
                 }
             
-            operation.complete("Email analysis completed successfully")
+            self.progress_tracker.complete_operation(operation.operation_id, "Email analysis completed successfully")
             return final_result
             
         except Exception as e:
@@ -470,49 +470,49 @@ class AIIntelligenceTools:
         try:
             # Create an async operation for tracking
             operation = self.progress_tracker.create_operation(
-                operation_id=f"inbox_optimization_{int(time.time())}",
-                total_steps=4,
-                description="AI Inbox Optimization"
+                name="AI Inbox Optimization",
+                total_items=4,
+                operation_id=f"inbox_optimization_{int(time.time())}"
             )
             
             # Step 1: Analyze current inbox state
-            operation.update_progress(message="Analyzing current inbox state...")
+            self.progress_tracker.update_progress(operation.operation_id, message="Analyzing current inbox state...")
             inbox_analysis = await self.cli_bridge.analyze_inbox_state(
                 include_metrics=True
             )
-            operation.advance_step("Inbox analysis completed")
+            self.progress_tracker.advance_step(operation.operation_id, "Inbox analysis completed")
             
             # Step 2: Generate optimization plan
-            operation.update_progress(message="Generating optimization plan...")
+            self.progress_tracker.update_progress(operation.operation_id, message="Generating optimization plan...")
             optimization_plan = await self.cli_bridge.generate_optimization_plan(
                 inbox_analysis=inbox_analysis,
                 optimization_type=optimization_type,
                 aggressiveness=aggressiveness,
                 max_actions=max_actions
             )
-            operation.advance_step("Optimization plan generated")
+            self.progress_tracker.advance_step(operation.operation_id, "Optimization plan generated")
             
             # Step 3: Execute optimizations (or dry run)
             if dry_run:
-                operation.update_progress(message="Simulating optimizations...")
+                self.progress_tracker.update_progress(operation.operation_id, message="Simulating optimizations...")
                 execution_result = await self.cli_bridge.simulate_optimizations(
                     plan=optimization_plan
                 )
-                operation.advance_step("Simulation completed")
+                self.progress_tracker.advance_step(operation.operation_id, "Simulation completed")
             else:
-                operation.update_progress(message="Executing optimizations...")
+                self.progress_tracker.update_progress(operation.operation_id, message="Executing optimizations...")
                 execution_result = await self.cli_bridge.execute_optimizations(
                     plan=optimization_plan
                 )
-                operation.advance_step("Optimizations executed")
+                self.progress_tracker.advance_step(operation.operation_id, "Optimizations executed")
             
             # Step 4: Verify results
-            operation.update_progress(message="Verifying results...")
+            self.progress_tracker.update_progress(operation.operation_id, message="Verifying results...")
             verification_result = await self.cli_bridge.verify_optimization_results(
                 execution_result=execution_result,
                 dry_run=dry_run
             )
-            operation.complete("Inbox optimization completed")
+            self.progress_tracker.complete_operation(operation.operation_id, "Inbox optimization completed")
             
             processing_time = time.time() - start_time
             
