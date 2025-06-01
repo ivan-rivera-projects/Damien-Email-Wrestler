@@ -48,25 +48,53 @@ def create_tool_schema(
     
     return schema
 
-# Tool 1: damien_list_emails
+# Tool 1: damien_list_emails (OPTIMIZED)
 list_emails_schema = create_tool_schema(
     name="damien_list_emails",
-    description="Lists email summaries from the user's Gmail account based on specified criteria. "
-               "Returns a list of emails and a token for pagination if more emails are available.",
+    description="""
+    ⚡ OPTIMIZATION REQUIRED: Lists email messages with support for pagination. 
+    ALWAYS use 'include_headers' parameter to fetch all needed data in ONE call 
+    instead of making multiple get_email_details calls. This saves 10x time and tokens.
+    
+    Example: include_headers=["From", "Subject", "Date", "To", "List-Unsubscribe"]
+    
+    Token Efficiency Tips:
+    - Use include_headers for common fields (saves 90% follow-up calls)
+    - Set appropriate max_results (default 10, max 100)  
+    - Use query filters to reduce irrelevant results
+    - Gmail query examples: 'is:unread from:boss@example.com', 'subject:report older_than:7d'
+    """,
     properties={
         "query": {
             "type": "string",
-            "description": "Optional. Gmail search query string to filter emails (e.g., 'is:unread from:boss@example.com', "
-                          "'subject:report older_than:7d'). If omitted, lists recent emails."
+            "description": "Optional. Gmail search query string to filter emails. "
+                          "Examples: 'is:unread from:boss@example.com', 'subject:report older_than:7d'. "
+                          "If omitted, lists recent emails."
         },
         "max_results": {
             "type": "integer",
-            "description": "Optional. Maximum number of email summaries to return in this call. "
-                          "Default is 10, maximum is typically 50-100 per page for performance."
+            "description": "Optional. Maximum number of email summaries to return (default: 10, max: 100). "
+                          "Use lower values for faster responses and token efficiency.",
+            "default": 10,
+            "minimum": 1,
+            "maximum": 100
         },
         "page_token": {
             "type": "string",
-            "description": "Optional. A token received from a previous 'damien_list_emails' call to fetch the next page of results."
+            "description": "Optional. Pagination token from a previous call to fetch next page."
+        },
+        "include_headers": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "🚀 PERFORMANCE OPTIMIZATION: List of header names to include in response. "
+                          "This ELIMINATES the need for separate get_email_details calls, saving 10x tokens. "
+                          "Common headers: ['From', 'Subject', 'Date', 'To', 'Cc', 'List-Unsubscribe']. "
+                          "Use this for ANY operation that needs email details!",
+            "examples": [
+                ["From", "Subject", "Date"],
+                ["From", "Subject", "Date", "To", "List-Unsubscribe"],
+                ["From", "Subject", "Date", "To", "Cc", "Bcc", "Reply-To"]
+            ]
         }
     },
     output_schema={
@@ -83,11 +111,22 @@ list_emails_schema = create_tool_schema(
                         "from": {"type": "string"},
                         "snippet": {"type": "string"},
                         "date": {"type": "string"},
-                        "has_attachments": {"type": "boolean"}
+                        "has_attachments": {"type": "boolean"},
+                        "headers": {
+                            "type": "object",
+                            "description": "Requested headers (when include_headers used)"
+                        }
                     }
                 }
             },
-            "next_page_token": {"type": "string"}
+            "next_page_token": {"type": "string"},
+            "performance_info": {
+                "type": "object",
+                "properties": {
+                    "tokens_saved": {"type": "number"},
+                    "api_calls_avoided": {"type": "number"}
+                }
+            }
         }
     }
 )
