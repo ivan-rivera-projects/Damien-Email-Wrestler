@@ -678,12 +678,31 @@ class DamienAdapter:
             logger.error(f"Unexpected error in get_rule_details_tool: {e}", exc_info=True)
             return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR"}
 
-    async def add_rule_tool(self, rule_definition: Dict[str, Any]) -> Dict[str, Any]:
+    async def add_rule_tool(self, rule_definition) -> Dict[str, Any]:
         try:
             logger.debug(f"Adapter: Adding new rule: {rule_definition}")
-            new_rule_model = RuleModel(**rule_definition)
+            logger.debug(f"Rule definition type: {type(rule_definition)}")
+            
+            # Handle both RuleDefinitionModel instances and dictionaries
+            if hasattr(rule_definition, 'model_dump'):
+                # It's a Pydantic model, convert to dict
+                rule_dict = rule_definition.model_dump()
+                logger.debug(f"Converted RuleDefinitionModel to dict: {rule_dict}")
+            elif isinstance(rule_definition, dict):
+                # It's already a dictionary
+                rule_dict = rule_definition
+                logger.debug(f"Using provided dictionary: {rule_dict}")
+            else:
+                raise ValidationError(f"rule_definition must be a RuleDefinitionModel or dictionary, got {type(rule_definition)}")
+            
+            # Convert any nested objects to dictionaries if needed
+            cleaned_rule_definition = self._clean_rule_definition(rule_dict)
+            
+            # Create the RuleModel with validated data
+            new_rule_model = RuleModel(**cleaned_rule_definition)
             added_rule = self.damien_rules_module.add_rule(new_rule_model)
             return {"success": True, "data": added_rule.model_dump(mode="json")}
+            
         except ValidationError as e: 
             logger.error(f"Invalid rule definition for add_rule_tool: {e.errors()}", exc_info=True)
             return {"success": False, "error_message": f"Invalid rule definition: {e.errors()}", "error_code": "INVALID_RULE_DEFINITION"}
@@ -693,6 +712,37 @@ class DamienAdapter:
         except Exception as e:
             logger.error(f"Unexpected error in add_rule_tool: {e}", exc_info=True)
             return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR"}
+
+    def _clean_rule_definition(self, rule_definition: Dict[str, Any]) -> Dict[str, Any]:
+        """Clean and validate rule definition for RuleModel constructor."""
+        cleaned = {}
+        
+        # Copy basic fields
+        for field in ['name', 'description', 'is_enabled', 'condition_conjunction']:
+            if field in rule_definition:
+                cleaned[field] = rule_definition[field]
+        
+        # Handle conditions (ensure they're proper dictionaries)
+        if 'conditions' in rule_definition:
+            cleaned['conditions'] = []
+            for condition in rule_definition['conditions']:
+                if isinstance(condition, dict):
+                    cleaned['conditions'].append(condition)
+                else:
+                    # Convert condition object to dict if needed
+                    cleaned['conditions'].append(condition.model_dump() if hasattr(condition, 'model_dump') else dict(condition))
+        
+        # Handle actions (ensure they're proper dictionaries)
+        if 'actions' in rule_definition:
+            cleaned['actions'] = []
+            for action in rule_definition['actions']:
+                if isinstance(action, dict):
+                    cleaned['actions'].append(action)
+                else:
+                    # Convert action object to dict if needed
+                    cleaned['actions'].append(action.model_dump() if hasattr(action, 'model_dump') else dict(action))
+        
+        return cleaned
 
     async def delete_rule_tool(self, rule_identifier: str) -> Dict[str, Any]:
         try:

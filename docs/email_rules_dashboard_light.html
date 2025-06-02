@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEURAL EMAIL COMMAND CENTER - LIGHT</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=JetBrains+Mono:wght@100;200;300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --pure-white: #ffffff;
+            --platinum: #f8fafc;
+            --silver: #e2e8f0;
+            --steel: #cbd5e1;
+            --graphite: #64748b;
+            --charcoal: #334155;
+            --obsidian: #0f172a;
+            --electric-blue: #3b82f6;
+            --cyber-purple: #8b5cf6;
+            --neon-accent: #06b6d4;
+            --glass-white: rgba(255, 255, 255, 0.8);
+            --glass-silver: rgba(248, 250, 252, 0.6);
+            --shadow-light: rgba(15, 23, 42, 0.08);
+            --shadow-medium: rgba(15, 23, 42, 0.15);
+            --shadow-heavy: rgba(15, 23, 42, 0.25);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--pure-white);
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(6, 182, 212, 0.03) 0%, transparent 50%);
+            z-index: -1;
+        }
+
+        .neural-grid {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                linear-gradient(rgba(15, 23, 42, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(15, 23, 42, 0.02) 1px, transparent 1px);
+            background-size: 30px 30px;
+            z-index: -1;
+            animation: gridPulse 6s ease-in-out infinite;
+        }
+
+        @keyframes gridPulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.6; }
+        }
+
+        .command-center {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px 16px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .neural-header {
+            text-align: center;
+            margin-bottom: 32px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .damien-logo {
+            width: clamp(60px, 8vw, 80px);
+            height: auto;
+            margin-bottom: 16px;
+            filter: drop-shadow(0 4px 8px var(--shadow-light));
+            transition: all 0.3s ease;
+        }
+
+        .damien-logo:hover {
+            transform: scale(1.05);
+            filter: drop-shadow(0 6px 12px var(--shadow-medium));
+        }
+
+        .system-title {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--obsidian), var(--charcoal), var(--electric-blue));
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradientShift 4s ease infinite;
+            letter-spacing: -0.03em;
+            line-height: 0.9;
+            text-transform: uppercase;
+            filter: drop-shadow(0 2px 4px var(--shadow-light));
+        }
+
+        .system-subtitle {
+            font-size: clamp(0.9rem, 2vw, 1.2rem);
+            font-weight: 300;
+            color: var(--graphite);
+            margin-top: 8px;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+        }
+
+        .system-status {
+            position: absolute;
+            top: -10px;
+            right: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--electric-blue);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--electric-blue);
+            box-shadow: 0 0 12px var(--electric-blue);
+            animation: statusPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        @keyframes statusPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.3); }
+        }
+
+        .neural-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .metric-module {
+            background: var(--glass-white);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--silver);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 12px var(--shadow-light);
+        }
+
+        .metric-module::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--electric-blue), var(--cyber-purple));
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+
+        .metric-module:hover::before {
+            transform: scaleX(1);
+        }
+
+        .metric-module:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px var(--shadow-medium);
+            border-color: var(--electric-blue);
+        }
+
+        .metric-value {
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--obsidian), var(--electric-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .metric-label {
+            font-size: clamp(0.7rem, 1.5vw, 0.9rem);
+            font-weight: 600;
+            color: var(--graphite);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .rules-matrix {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 20px;
+        }
+
+        .rule-module {
+            background: var(--glass-white);
+            backdrop-filter: blur(30px);
+            border-radius: 20px;
+            padding: 24px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--silver);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 12px var(--shadow-light);
+        }
+
+        .rule-module::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.02), rgba(139, 92, 246, 0.02));
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+
+        .rule-module:hover::before {
+            opacity: 1;
+        }
+
+        .rule-module:hover {
+            transform: translateY(-6px) scale(1.01);
+            box-shadow: 0 16px 32px var(--shadow-medium);
+            border-color: var(--electric-blue);
+        }
+
+        .rule-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .rule-identifier {
+            font-size: clamp(1rem, 2vw, 1.3rem);
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--obsidian), var(--charcoal));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.2;
+            margin-bottom: 4px;
+        }
+
+        .neural-status {
+            padding: 6px 12px;
+            border-radius: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .status-online {
+            background: linear-gradient(135deg, var(--electric-blue), var(--neon-accent));
+            color: var(--pure-white);
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+        }
+
+        .status-offline {
+            background: linear-gradient(135deg, var(--graphite), var(--steel));
+            color: var(--pure-white);
+            box-shadow: 0 2px 8px rgba(100, 116, 139, 0.3);
+        }
+
+        .rule-description {
+            font-size: clamp(0.8rem, 1.5vw, 0.95rem);
+            color: var(--graphite);
+            margin-bottom: 20px;
+            line-height: 1.5;
+            position: relative;
+            z-index: 2;
+        }
+
+        .neural-section {
+            margin-bottom: 16px;
+        }
+
+        .section-header {
+            font-size: clamp(0.7rem, 1.2vw, 0.8rem);
+            font-weight: 700;
+            color: var(--electric-blue);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            position: relative;
+            z-index: 2;
+        }
+
+        .condition-matrix, .action-matrix {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .neural-condition, .neural-action {
+            background: var(--glass-silver);
+            border: 1px solid var(--steel);
+            border-radius: 10px;
+            padding: 12px 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: clamp(0.7rem, 1.2vw, 0.8rem);
+            color: var(--charcoal);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+
+        .neural-condition::before, .neural-action::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(180deg, var(--electric-blue), var(--cyber-purple));
+        }
+
+        .neural-action {
+            background: rgba(6, 182, 212, 0.04);
+            border-color: rgba(6, 182, 212, 0.2);
+        }
+
+        .neural-action::before {
+            background: linear-gradient(180deg, var(--neon-accent), var(--electric-blue));
+        }
+
+        .logic-operator {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--electric-blue), var(--cyber-purple));
+            color: var(--pure-white);
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 700;
+            margin: 12px 0;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+            position: relative;
+            z-index: 2;
+        }
+
+        .neural-id {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--graphite);
+            background: var(--platinum);
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            z-index: 2;
+            border: 1px solid var(--silver);
+        }
+
+        .neural-id:hover {
+            color: var(--electric-blue);
+            background: var(--pure-white);
+            border-color: var(--electric-blue);
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+        }
+
+        @media (max-width: 768px) {
+            .rules-matrix {
+                grid-template-columns: 1fr;
+            }
+            
+            .rule-module {
+                padding: 20px 16px;
+            }
+            
+            .neural-metrics {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .neural-metrics {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .floating-elements {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .floating-orb {
+            position: absolute;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.08), transparent);
+            animation: float 8s ease-in-out infinite;
+            opacity: 0.4;
+        }
+
+        .floating-orb:nth-child(1) {
+            width: 120px;
+            height: 120px;
+            top: 15%;
+            left: 85%;
+            animation-delay: 0s;
+        }
+
+        .floating-orb:nth-child(2) {
+            width: 80px;
+            height: 80px;
+            top: 70%;
+            left: 5%;
+            animation-delay: 3s;
+            background: radial-gradient(circle, rgba(139, 92, 246, 0.08), transparent);
+        }
+
+        .floating-orb:nth-child(3) {
+            width: 60px;
+            height: 60px;
+            top: 40%;
+            left: 25%;
+            animation-delay: 6s;
+            background: radial-gradient(circle, rgba(6, 182, 212, 0.08), transparent);
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px) rotate(0deg);
+            }
+            50% {
+                transform: translateY(-15px) rotate(180deg);
+            }
+        }
+
+        .data-stream {
+            position: fixed;
+            top: 0;
+            right: 15px;
+            width: 1px;
+            height: 100%;
+            background: linear-gradient(180deg, transparent, rgba(59, 130, 246, 0.3), transparent);
+            opacity: 0.5;
+            animation: dataFlow 4s linear infinite;
+        }
+
+        @keyframes dataFlow {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+
+        .light-particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .light-particle {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            background: var(--electric-blue);
+            border-radius: 50%;
+            animation: sparkle 3s linear infinite;
+        }
+
+        @keyframes sparkle {
+            0% { opacity: 0; transform: scale(0); }
+            50% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="neural-grid"></div>
+    
+    <div class="floating-elements">
+        <div class="floating-orb"></div>
+        <div class="floating-orb"></div>
+        <div class="floating-orb"></div>
+    </div>
+    
+    <div class="data-stream"></div>
+    <div class="light-particles"></div>
+
+    <div class="command-center">
+        <div class="neural-header">
+            <div class="system-status">
+                <div class="status-indicator"></div>
+                <span>NEURAL LINK ACTIVE</span>
+            </div>
+            <img src="/Users/ivanrivera/Downloads/AWS/DamienPlatform/damien-email-wrestler/scripts/damien_logo.png" alt="Damien Logo" class="damien-logo" />
+            <h1 class="system-title">DAMIEN EMAIL<br>COMMAND CENTER</h1>
+            <p class="system-subtitle">AUTONOMOUS RULE MATRIX</p>
+        </div>
+
+        <div class="neural-metrics">
+            <div class="metric-module">
+                <div class="metric-value">06</div>
+                <div class="metric-label">ACTIVE PROTOCOLS</div>
+            </div>
+            <div class="metric-module">
+                <div class="metric-value">06</div>
+                <div class="metric-label">NEURAL NODES</div>
+            </div>
+            <div class="metric-module">
+                <div class="metric-value">00</div>
+                <div class="metric-label">OFFLINE SYSTEMS</div>
+            </div>
+            <div class="metric-module">
+                <div class="metric-value">04</div>
+                <div class="metric-label">DEMO MODULES</div>
+            </div>
+        </div>
+
+        <div class="rules-matrix">
+            <div class="rule-module">
+                <div class="rule-header">
+                    <div>
+                        <div class="rule-identifier">SENDER RECOGNITION PROTOCOL</div>
+                    </div>
+                    <div class="neural-status status-online">ONLINE</div>
+                </div>
+                <div class="rule-description">
+                    Advanced sender detection algorithm for automated label assignment to designated communication channels
+                </div>
+                <div class="neural-section">
+                    <div class="section-header">NEURAL CONDITIONS</div>
+                    <div class="condition-matrix">
+                        <div class="neural-condition">
+                            from.contains("sender@example.com")
+                        </div>
+                    </div>
+                    <div class="logic-operator">AND</div>
+                    <div class="section-header">EXECUTION PROTOCOL</div>
+                    <div class="action-matrix">
+                        <div class="neural-action">
+                            DEPLOY_LABEL → MyLabel
+                        </div>
+                    </div>
+                </div>
+                <div class="neural-id">NEURAL_ID: d70825a4-e0e9-4978-822b-b0c1102c496b</div>
+            </div>
+
+            <div class="rule-module">
+                <div class="rule-header">
+                    <div>
+                        <div class="rule-identifier">MULTI-VECTOR LOGIC ENGINE</div>
+                    </div>
+                    <div class="neural-status status-online">ONLINE</div>
+                </div>
+                <div class="rule-description">
+                    Parallel processing system utilizing OR logic gates for multi-conditional message routing and classification
+                </div>
+                <div class="neural-section">
+                    <div class="section-header">NEURAL CONDITIONS</div>
+                    <div class="condition-matrix">
+                        <div class="neural-condition">
+                            from.contains("sender1@example.com")
+                        </div>
+                        <div class="neural-condition">
+                            subject.contains("Order Confirmation")
+                        </div>
+                    </div>
+                    <div class="logic-operator">OR</div>
+                    <div class="section-header">EXECUTION PROTOCOL</div>
+                    <div class="action-matrix">
+                        <div class="neural-action">
+                            DEPLOY_LABEL → MyLabel
+                        </div>
+                    </div>
+                </div>
+                <div class="neural-id">NEURAL_ID: 7ba303bc-9d11-454e-b5a0-4d739898e0e2</div>
+            </div>
+
+            <div class="rule-module">
+                <div class="rule-header">
+                    <div>
+                        <div class="rule-identifier">CONTENT ELIMINATION SYSTEM</div>
+                    </div>
+                    <div class="neural-status status-online">ONLINE</div>
+                </div>
+                <div class="rule-description">
+                    Autonomous threat detection and elimination protocol for unwanted communication payloads
+                </div>
+                <div class="neural-section">
+                    <div class="section-header">NEURAL CONDITIONS</div>
+                    <div class="condition-matrix">
+                        <div class="neural-condition">
+                            subject.contains("specific keyword")
+                        </div>
+                    </div>
+                    <div class="logic-operator">AND</div>
+                    <div class="section-header">EXECUTION PROTOCOL</div>
+                    <div class="action-matrix">
+                        <div class="neural-action">
+                            EXECUTE_DELETION → TRASH_PROTOCOL
+                        </div>
+                    </div>
+                </div>
+                <div class="neural-id">NEURAL_ID: df90f85d-673b-453e-9e53-c74300bdc06e</div>
+            </div>
+
+            <div class="rule-module">
+                <div class="rule-header">
+                    <div>
+                        <div class="rule-identifier">DEEP SCAN READ ENGINE</div>
+                    </div>
+                    <div class="neural-status status-online">ONLINE</div>
+                </div>
+                <div class="rule-description">
+                    Advanced body content analysis with auto-classification capabilities for intelligent message processing
+                </div>
+                <div class="neural-section">
+                    <div class="section-header">NEURAL CONDITIONS</div>
+                    <div class="condition-matrix">
+                        <div class="neural-condition">
+                            body_snippet.contains("E2EBodyTestXYZ123")
+                        </div>
+                    </div>
+                    <div class="logic-operator">AND</div>
+                    <div class="section-header">EXECUTION PROTOCOL</div>
+                    <div class="action-matrix">
+                        <div class="neural-action">
+                            SET_STATUS → READ_CONFIRMED
+                        </div>
+                    </div>
+                </div>
+                <div class="neural-id">NEURAL_ID: d7ffb85a-d86f-4560-a3a3-32ea80b6aadc</div>
+            </div>
+
+            <div class="rule-module">
+                <div class="rule-header">
+                    <div>
+                        <div class="rule-identifier">TARGETED MARKING PROTOCOL</div>
+                    </div>
+                    <div class="neural-status status-online">ONLINE</div>
+                </div>
+                <div class="rule-description">
+                    Precision labeling system for targeted message identification and batch processing workflows
+                </div>
+                <div class="neural-section">
+                    <div class="section-header">NEURAL CONDITIONS</div>
+                    <div class="condition-matrix">
+                        <div class="neural-condition">
+                            subject.contains("")
+                        </div>
+                    </div>
+                    <div class="logic-operator">AND</div>
+                    <div class="section-header">EXECUTION PROTOCOL</div>
+                    <div class="action-matrix">
+                        <div class="neural-action">
+                            DEPLOY_LABEL → tobetrashedbyrule
+                        </div>
+                    </div>
+                </div>
+                <div class="neural-id">NEURAL_ID: 2c78adfa-39d5-46e9-95b0-eb3a4ea9b8a1</div>
+            </div>
+
+            <div class="rule-module">
+                <div class="rule-header">
+                    <div>
+                        <div class="rule-identifier">TEMPORAL ANALYSIS ENGINE</div>
+                    </div>
+                    <div class="neural-status status-online">ONLINE</div>
+                </div>
+                <div class="rule-description">
+                    Chronological message classification system utilizing advanced temporal algorithms for age-based processing
+                </div>
+                <div class="neural-section">
+                    <div class="section-header">NEURAL CONDITIONS</div>
+                    <div class="condition-matrix">
+                        <div class="neural-condition">
+                            date_age.older_than("7d")
+                        </div>
+                    </div>
+                    <div class="logic-operator">AND</div>
+                    <div class="section-header">EXECUTION PROTOCOL</div>
+                    <div class="action-matrix">
+                        <div class="neural-action">
+                            DEPLOY_LABEL → OldMailTest
+                        </div>
+                    </div>
+                </div>
+                <div class="neural-id">NEURAL_ID: 8462cd5b-8f81-4c58-b8e5-20489f25334e</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Enhanced light theme interactions
+        document.querySelectorAll('.rule-module').forEach((module, index) => {
+            module.style.animationDelay = `${index * 0.08}s`;
+            
+            module.addEventListener('mouseenter', () => {
+                module.style.transform = 'translateY(-6px) scale(1.01)';
+                module.style.boxShadow = '0 16px 32px rgba(15, 23, 42, 0.15)';
+            });
+            
+            module.addEventListener('mouseleave', () => {
+                module.style.transform = 'translateY(0) scale(1)';
+                module.style.boxShadow = '0 4px 12px rgba(15, 23, 42, 0.08)';
+            });
+        });
+
+        // Neural ID interaction with light theme feedback
+        document.querySelectorAll('.neural-id').forEach(id => {
+            id.addEventListener('click', () => {
+                const idText = id.textContent.replace('NEURAL_ID: ', '');
+                navigator.clipboard.writeText(idText).then(() => {
+                    const originalText = id.textContent;
+                    id.textContent = 'NEURAL_ID: COPIED_TO_MEMORY';
+                    id.style.background = 'linear-gradient(135deg, #3b82f6, #06b6d4)';
+                    id.style.color = 'white';
+                    id.style.transform = 'scale(1.02)';
+                    id.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+                    
+                    setTimeout(() => {
+                        id.textContent = originalText;
+                        id.style.background = '#f8fafc';
+                        id.style.color = '#64748b';
+                        id.style.transform = 'scale(1)';
+                        id.style.boxShadow = 'none';
+                    }, 1500);
+                });
+            });
+        });
+
+        // Light particles system
+        const createLightParticle = () => {
+            const particle = document.createElement('div');
+            particle.className = 'light-particle';
+            particle.style.left = Math.random() * window.innerWidth + 'px';
+            particle.style.top = Math.random() * window.innerHeight + 'px';
+            particle.style.animationDelay = Math.random() * 3 + 's';
+            
+            document.querySelector('.light-particles').appendChild(particle);
+            
+            setTimeout(() => {
+                particle.remove();
+            }, 3000);
+        };
+
+        // Spawn light particles
+        setInterval(createLightParticle, 800);
+
+        // Subtle title effects for light theme
+        const title = document.querySelector('.system-title');
+        setInterval(() => {
+            title.style.filter = `
+                drop-shadow(0 2px 4px rgba(15, 23, 42, 0.1))
+                drop-shadow(0 0 8px rgba(59, 130, 246, 0.1))
+            `;
+            setTimeout(() => {
+                title.style.filter = 'drop-shadow(0 2px 4px rgba(15, 23, 42, 0.08))';
+            }, 200);
+        }, 4000);
+
+        // Metric module subtle animations
+        document.querySelectorAll('.metric-module').forEach((module, index) => {
+            setTimeout(() => {
+                module.style.opacity = '1';
+                module.style.transform = 'translateY(0)';
+            }, index * 100);
+        });
+    </script>
+</body>
+</html>

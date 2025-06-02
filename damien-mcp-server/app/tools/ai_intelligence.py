@@ -354,7 +354,7 @@ class AIIntelligenceTools:
             # Validate rule before creation
             if validate_before_create:
                 validation_result = await self.cli_bridge.validate_rule_creation(
-                    rule=parsing_result.get("rule", {}),
+                    parsing_result.get("rule", {}),
                     check_conflicts=True
                 )
                 
@@ -369,12 +369,12 @@ class AIIntelligenceTools:
             # Create rule (or simulate if dry run)
             if dry_run:
                 creation_result = await self.cli_bridge.simulate_rule_creation(
-                    rule=parsing_result.get("rule", {})
+                    parsing_result.get("rule", {})
                 )
                 status = "dry_run_success"
             else:
                 creation_result = await self.cli_bridge.create_email_rule(
-                    rule=parsing_result.get("rule", {})
+                    parsing_result.get("rule", {})
                 )
                 status = "created"
             
