@@ -1073,27 +1073,93 @@ class CLIBridge:
     # AI Intelligence Integration Methods
     # ============================================================================
     
-    async def fetch_emails(self, days: int = 30, max_emails: int = 500, query: Optional[str] = None) -> Dict[str, Any]:
-        """Fetch emails from Gmail for analysis."""
-        async with self._performance_context("fetch_emails"):
-            # Mock email data - in production would integrate with Gmail API
-            mock_emails = []
-            for i in range(min(max_emails, 50)):  # Limit mock data
-                mock_emails.append({
-                    "id": f"email_{i}",
-                    "subject": f"Test Subject {i}",
-                    "content": f"This is test email content {i} with some sample text for analysis.",
-                    "sender": f"sender{i}@example.com",
-                    "timestamp": time.time() - (i * 3600),  # Hours ago
-                    "labels": ["INBOX"] if i % 3 == 0 else ["SENT"]
-                })
+    async def fetch_emails(self, days: int = 30, max_emails: int = 5000, query: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Fetch emails from Gmail for analysis using real Gmail API integration.
+        
+        This method overcomes the previous 50-email limitation by integrating with 
+        the existing damien_list_emails tool through batch processing.
+        
+        Args:
+            days: Number of days to look back for emails
+            max_emails: Maximum number of emails to fetch (increased default)
+            query: Optional Gmail search query
             
-            return {
-                "emails": mock_emails,
-                "total_fetched": len(mock_emails),
-                "query_used": query,
-                "fetch_duration_ms": 150  # Mock duration
-            }
+        Returns:
+            Dict containing emails list and metadata
+        """
+        async with self._performance_context("fetch_emails"):
+            try:
+                real_emails = []
+                page_token = None
+                batch_count = 0
+                
+                # Build query string with date filter
+                if query:
+                    full_query = f"{query} newer_than:{days}d"
+                else:
+                    full_query = f"newer_than:{days}d"
+                
+                logger.info(f"Fetching up to {max_emails} emails with query: {full_query}")
+                
+                # Batch collection loop - Gmail API supports max 100 emails per request
+                while len(real_emails) < max_emails:
+                    batch_size = min(100, max_emails - len(real_emails))
+                    
+                    # Call existing damien_list_emails tool
+                    batch_result = await self.call_damien_tool(
+                        "damien_list_emails",
+                        {
+                            "max_results": batch_size,
+                            "page_token": page_token,
+                            "include_headers": ["From", "Subject", "Date", "To", "List-Unsubscribe"],
+                            "query": full_query
+                        }
+                    )
+                    
+                    # Extract emails from batch result
+                    batch_emails = batch_result.get("email_summaries", [])
+                    if not batch_emails:
+                        logger.info("No more emails available")
+                        break
+                    
+                    real_emails.extend(batch_emails)
+                    page_token = batch_result.get("next_page_token")
+                    batch_count += 1
+                    
+                    logger.debug(f"Batch {batch_count}: Retrieved {len(batch_emails)} emails, total: {len(real_emails)}")
+                    
+                    # Rate limiting: Gmail API allows 250 quota units/second, 5 units per request = 50 requests/second max
+                    await asyncio.sleep(0.02)  # 20ms between requests = 50 requests/second
+                    
+                    # Break if no more pages
+                    if not page_token:
+                        logger.info("Reached end of available emails")
+                        break
+                
+                # Truncate to requested maximum
+                final_emails = real_emails[:max_emails]
+                
+                logger.info(f"Successfully fetched {len(final_emails)} emails in {batch_count} batches")
+                
+                return {
+                    "emails": final_emails,
+                    "total_fetched": len(final_emails),
+                    "query_used": full_query,
+                    "batches_processed": batch_count,
+                    "fetch_duration_ms": 0  # Will be calculated by performance context
+                }
+                
+            except Exception as e:
+                logger.error(f"Error fetching emails: {e}")
+                # Fallback to empty result rather than crashing
+                return {
+                    "emails": [],
+                    "total_fetched": 0,
+                    "query_used": query,
+                    "error": str(e),
+                    "fetch_duration_ms": 0
+                }
     
     async def analyze_email_patterns(self, emails: List[Any], min_confidence: float = 0.7) -> Dict[str, Any]:
         """Analyze email patterns using AI components."""
@@ -1377,3 +1443,74 @@ class CLIBridge:
                 for op_type in set(m.operation_name for m in recent_metrics)
             }
         }
+    
+    # ============================================================================
+    # Gmail Integration Methods
+    # ============================================================================
+    
+    async def call_damien_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Call existing Damien MCP tools from CLI bridge.
+        
+        This method enables the AI intelligence layer to invoke existing Gmail functionality
+        without duplicating the implementation. It provides a bridge between the AI components
+        and the established MCP tool ecosystem.
+        
+        Args:
+            tool_name: Name of the MCP tool to call (e.g., 'damien_list_emails')
+            parameters: Dictionary of parameters to pass to the tool
+            
+        Returns:
+            Dict containing the tool's response data
+            
+        Raises:
+            ValueError: If tool_name is not supported
+            Exception: If the tool call fails
+        """
+        async with self._performance_context(f"call_damien_tool_{tool_name}"):
+            try:
+                # Import the adapter to call tools directly
+                from ..services.damien_adapter import DamienAdapter
+                
+                # Create adapter instance
+                adapter = DamienAdapter()
+                
+                # Map tool names to their adapter methods
+                if tool_name == "damien_list_emails":
+                    result = await adapter.list_emails_tool(
+                        query=parameters.get("query"),
+                        max_results=parameters.get("max_results", 100),
+                        page_token=parameters.get("page_token"),
+                        include_headers=parameters.get("include_headers", [])
+                    )
+                elif tool_name == "damien_get_email_details":
+                    result = await adapter.get_email_details_tool(
+                        message_id=parameters.get("message_id"),
+                        format_option=parameters.get("format", "full"),
+                        include_headers=parameters.get("include_headers", [])
+                    )
+                elif tool_name == "damien_label_emails":
+                    result = await adapter.label_emails_tool(
+                        message_ids=parameters.get("message_ids", []),
+                        add_label_names=parameters.get("add_label_names", []),
+                        remove_label_names=parameters.get("remove_label_names", [])
+                    )
+                elif tool_name == "damien_trash_emails":
+                    result = await adapter.trash_emails_tool(
+                        message_ids=parameters.get("message_ids", [])
+                    )
+                else:
+                    raise ValueError(f"Unsupported tool: {tool_name}")
+                
+                # Check if the tool call was successful
+                if result.get("success"):
+                    logger.debug(f"Tool {tool_name} executed successfully")
+                    return result.get("data", {})
+                else:
+                    error_msg = result.get("error_message", "Unknown error")
+                    logger.error(f"Tool {tool_name} failed: {error_msg}")
+                    raise Exception(f"Tool execution failed: {error_msg}")
+                    
+            except Exception as e:
+                logger.error(f"Failed to call tool {tool_name}: {e}")
+                raise

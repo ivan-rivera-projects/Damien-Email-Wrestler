@@ -358,7 +358,7 @@ async def execute_tool_endpoint(
                     is_error_flag = True
                     error_message = api_response.get("error_message", "Unknown error from damien_delete_emails_permanently tool.")
 
-        # Registry-based Tools (Draft, Settings, Thread Tools, and AI Intelligence Tools) - Route to tool registry handlers
+        # Registry-based Tools (Draft, Settings, Thread Tools, AI Intelligence Tools, and Async Tools) - Route to tool registry handlers
         elif tool_name in ["damien_create_draft", "damien_update_draft", "damien_send_draft", 
                            "damien_list_drafts", "damien_get_draft_details", "damien_delete_draft",
                            "damien_get_vacation_settings", "damien_update_vacation_settings",
@@ -370,7 +370,10 @@ async def execute_tool_endpoint(
                            "damien_delete_thread_permanently",
                            # AI Intelligence tools added here (Phase 4)
                            "damien_ai_analyze_emails", "damien_ai_suggest_rules", "damien_ai_quick_test",
-                           "damien_ai_create_rule", "damien_ai_get_insights", "damien_ai_optimize_inbox"]:
+                           "damien_ai_create_rule", "damien_ai_get_insights", "damien_ai_optimize_inbox",
+                           # Async job tools added here 
+                           "damien_ai_analyze_emails_async", "damien_job_get_status", "damien_job_get_result",
+                           "damien_job_cancel", "damien_job_list"]:
             try:
                 # Import tool registry to get the handler
                 from ..services.tool_registry import tool_registry

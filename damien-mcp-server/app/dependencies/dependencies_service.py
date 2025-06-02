@@ -36,3 +36,12 @@ async def get_damien_adapter() -> DamienAdapter: # No longer depends on a g_clie
     # DamienAdapter now manages its own g_service_client internally
     adapter_instance = DamienAdapter()
     return adapter_instance
+
+
+def get_damien_adapter_instance() -> DamienAdapter:
+    """Get a DamienAdapter instance for non-FastAPI contexts like async tasks.
+    
+    Returns:
+        DamienAdapter: An instance of DamienAdapter for background processing.
+    """
+    return DamienAdapter()
