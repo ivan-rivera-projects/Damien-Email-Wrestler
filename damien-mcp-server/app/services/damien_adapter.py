@@ -124,7 +124,8 @@ class DamienAdapter:
         query: Optional[str] = None,
         max_results: int = 10,
         page_token: Optional[str] = None,
-        include_headers: Optional[List[str]] = None  # New parameter
+        include_headers: Optional[List[str]] = None,  # New parameter
+        optimize_query: bool = False  # Enable query optimization
     ) -> Dict[str, Any]:
         """Lists emails from Gmail based on search criteria.
         
@@ -135,6 +136,7 @@ class DamienAdapter:
             max_results: Maximum number of emails to retrieve.
             page_token: Optional token for pagination.
             include_headers: Optional list of header names to include in summaries.
+            optimize_query: Whether to apply smart query optimization for large queries.
             
         Returns:
             Dict[str, Any]: A dictionary containing operation status, data or error.
@@ -143,8 +145,58 @@ class DamienAdapter:
             g_client = await self._ensure_g_service_client()
             logger.debug(
                 f"Adapter: list_emails_tool called with query='{query}', max_results={max_results}, "
-                f"page_token='{page_token}', include_headers={include_headers}"
+                f"page_token='{page_token}', include_headers={include_headers}, optimize_query={optimize_query}"
             )
+            
+            # Apply query optimization if enabled
+            if optimize_query and query and not page_token:
+                # Only import when needed to avoid circular imports
+                from damien_cli.utilities.query_optimizer import optimize_bulk_query
+                
+                # Get optimized queries
+                optimized_queries = optimize_bulk_query(query, max_results)
+                
+                # If we got multiple optimized queries, handle them specially
+                if len(optimized_queries) > 1:
+                    logger.info(f"Query optimized into {len(optimized_queries)} targeted queries")
+                    
+                    # Aggregate results from all optimized queries
+                    all_messages = []
+                    
+                    for opt_query in optimized_queries:
+                        # For each optimized query, get a batch of results
+                        batch_size = max(10, max_results // len(optimized_queries))
+                        opt_result = self.damien_gmail_integration_module.list_messages(
+                            service=g_client,
+                            query_string=opt_query,
+                            max_results=batch_size,
+                            page_token=None,  # Don't use pagination for individual optimized queries
+                            include_headers=include_headers
+                        )
+                        
+                        if opt_result and "messages" in opt_result:
+                            all_messages.extend(opt_result.get("messages", []))
+                            
+                            # If we have enough messages, stop querying
+                            if len(all_messages) >= max_results:
+                                break
+                    
+                    # Truncate to max_results
+                    all_messages = all_messages[:max_results]
+                    
+                    # Since we're combining results, we don't have a real next page token
+                    # We'd need a more complex pagination scheme for this case
+                    return {
+                        "success": True,
+                        "data": {
+                            "email_summaries": all_messages,
+                            "next_page_token": None,
+                            "optimized": True,
+                            "query_count": len(optimized_queries)
+                        }
+                    }
+            
+            # Standard path - either optimization disabled or no optimization needed
             result_data = self.damien_gmail_integration_module.list_messages(
                 service=g_client,
                 query_string=query,
@@ -152,6 +204,7 @@ class DamienAdapter:
                 page_token=page_token,
                 include_headers=include_headers
             )
+            
             # The damien_cli.list_messages will now return richer objects if include_headers was used.
             # If include_headers was None, it returns basic stubs (id, threadId).
             # If include_headers was provided, it returns a list of dicts, each potentially having
@@ -201,26 +254,292 @@ class DamienAdapter:
             logger.error(f"Unexpected error in get_email_details_tool for ID {message_id}: {e}", exc_info=True)
             return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR"}
 
-    async def trash_emails_tool(self, message_ids: List[str]) -> Dict[str, Any]:
-        if not message_ids: return {"success": False, "error_message": "No message IDs provided to trash.", "error_code": "INVALID_PARAMETER", "data": {"trashed_count": 0, "status_message": "No message IDs provided."}}
+    async def trash_emails_tool(
+        self, 
+        message_ids: Optional[List[str]] = None,
+        query: Optional[str] = None,
+        estimated_count: Optional[int] = None,
+        use_progressive: bool = True,
+        optimize_query: bool = True
+    ) -> Dict[str, Any]:
+        """Moves emails to trash.
+        
+        Can operate in two modes:
+        1. Direct mode: Provide message_ids list to trash specific emails
+        2. Query mode: Provide query string to find and trash matching emails
+        
+        Args:
+            message_ids: Optional list of message IDs to trash
+            query: Optional Gmail search query to find emails to trash
+            estimated_count: Optional estimated count for progress tracking
+            use_progressive: Whether to use progressive batching (for query mode)
+            optimize_query: Whether to apply smart query optimization (for query mode)
+            
+        Returns:
+            Dict[str, Any]: A dictionary containing operation status, data or error.
+        """
+        # Parameter validation
+        if not message_ids and not query:
+            return {
+                "success": False, 
+                "error_message": "Either message_ids or query must be provided.", 
+                "error_code": "INVALID_PARAMETER", 
+                "data": {"trashed_count": 0, "status_message": "No emails specified to trash."}
+            }
+            
         try:
             g_client = await self._ensure_g_service_client()
-            logger.debug(f"Adapter: Trashing {len(message_ids)} emails: {message_ids}")
-            success = self.damien_gmail_integration_module.batch_trash_messages(service=g_client, message_ids=message_ids)
-            if success:
-                status_msg = f"Successfully moved {len(message_ids)} email(s) to trash."
-                logger.info(status_msg)
-                return {"success": True, "data": {"trashed_count": len(message_ids), "status_message": status_msg}}
+            
+            # CASE 1: Direct mode with message_ids
+            if message_ids:
+                logger.debug(f"Adapter: Trashing {len(message_ids)} emails using direct mode")
+                success = self.damien_gmail_integration_module.batch_trash_messages(
+                    service=g_client, 
+                    message_ids=message_ids
+                )
+                
+                if success:
+                    status_msg = f"Successfully moved {len(message_ids)} email(s) to trash."
+                    logger.info(status_msg)
+                    return {
+                        "success": True, 
+                        "data": {
+                            "trashed_count": len(message_ids), 
+                            "status_message": status_msg,
+                            "mode": "direct"
+                        }
+                    }
+                else:
+                    status_msg = f"Operation to move {len(message_ids)} email(s) to trash reported non-true by core API."
+                    logger.warning(status_msg)
+                    return {
+                        "success": False, 
+                        "error_message": status_msg, 
+                        "error_code": "CORE_API_OPERATION_FAILED", 
+                        "data": {
+                            "trashed_count": 0, 
+                            "status_message": status_msg
+                        }
+                    }
+            
+            # CASE 2: Query mode
+            logger.info(f"Adapter: Trashing emails matching query '{query}' using {'progressive' if use_progressive else 'standard'} mode")
+            
+            # Apply query optimization if enabled
+            if optimize_query:
+                # Only import when needed to avoid circular imports
+                from damien_cli.utilities.query_optimizer import optimize_bulk_query
+                
+                original_query = query
+                optimized_queries = optimize_bulk_query(query, estimated_count)
+                
+                if len(optimized_queries) > 1:
+                    logger.info(f"Optimized query '{original_query}' into {len(optimized_queries)} targeted queries")
+                    
+                    # If we have multiple optimized queries, process them one by one
+                    total_trashed = 0
+                    all_results = []
+                    
+                    for opt_query in optimized_queries:
+                        if use_progressive:
+                            # Process this query with progressive batching
+                            from damien_cli.utilities.query_optimizer import get_batch_size_strategy
+                            
+                            # Get optimized batch sizing for this operation
+                            batch_sizing = get_batch_size_strategy(
+                                operation_type="trash", 
+                                estimated_count=estimated_count
+                            )
+                            
+                            # Process progressively
+                            result = await self.damien_gmail_integration_module.trash_emails_progressively(
+                                service=g_client,
+                                query_string=opt_query,
+                                estimated_count=estimated_count,
+                                batch_sizing=batch_sizing
+                            )
+                            
+                            # Track results
+                            if result.get("success", False):
+                                total_trashed += result.get("trashed_count", 0)
+                                all_results.append(result)
+                            else:
+                                # Return on first error
+                                return {
+                                    "success": False,
+                                    "error_message": result.get("error_message", "Unknown error"),
+                                    "error_code": "PROGRESSIVE_OPERATION_FAILED",
+                                    "data": {
+                                        "trashed_count": total_trashed,
+                                        "status_message": f"Error processing query: {opt_query}",
+                                        "partial_results": all_results
+                                    }
+                                }
+                        else:
+                            # Standard processing (non-progressive)
+                            # First get the IDs
+                            emails = self.damien_gmail_integration_module.list_messages(
+                                service=g_client,
+                                query_string=opt_query,
+                                max_results=200  # Get larger batches for efficiency
+                            )
+                            
+                            if emails and "messages" in emails:
+                                # Extract IDs
+                                batch_ids = [msg["id"] for msg in emails.get("messages", [])]
+                                
+                                if batch_ids:
+                                    # Trash this batch
+                                    success = self.damien_gmail_integration_module.batch_trash_messages(
+                                        service=g_client,
+                                        message_ids=batch_ids
+                                    )
+                                    
+                                    if success:
+                                        total_trashed += len(batch_ids)
+                                    else:
+                                        # Return on first error
+                                        return {
+                                            "success": False,
+                                            "error_message": f"Failed to trash emails for query: {opt_query}",
+                                            "error_code": "BATCH_OPERATION_FAILED",
+                                            "data": {
+                                                "trashed_count": total_trashed,
+                                                "status_message": f"Error processing query: {opt_query}"
+                                            }
+                                        }
+                    
+                    # Return success with total count
+                    status_msg = f"Successfully moved {total_trashed} email(s) to trash using {len(optimized_queries)} optimized queries."
+                    logger.info(status_msg)
+                    return {
+                        "success": True,
+                        "data": {
+                            "trashed_count": total_trashed,
+                            "status_message": status_msg,
+                            "mode": "query_optimized",
+                            "queries_processed": len(optimized_queries)
+                        }
+                    }
+                
+                # If optimization didn't produce multiple queries, use original
+                query = optimized_queries[0]
+            
+            # Single query processing (either original or the only optimized one)
+            if use_progressive:
+                # Progressive batching for single query
+                from damien_cli.utilities.query_optimizer import get_batch_size_strategy
+                
+                # Get optimized batch sizing for this operation
+                batch_sizing = get_batch_size_strategy(
+                    operation_type="trash", 
+                    estimated_count=estimated_count
+                )
+                
+                # Process progressively
+                result = await self.damien_gmail_integration_module.trash_emails_progressively(
+                    service=g_client,
+                    query_string=query,
+                    estimated_count=estimated_count,
+                    batch_sizing=batch_sizing
+                )
+                
+                if result.get("success", False):
+                    status_msg = f"Successfully moved {result.get('trashed_count', 0)} email(s) to trash using progressive processing."
+                    logger.info(status_msg)
+                    return {
+                        "success": True,
+                        "data": {
+                            "trashed_count": result.get("trashed_count", 0),
+                            "status_message": status_msg,
+                            "mode": "query_progressive"
+                        }
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error_message": result.get("error_message", "Unknown error"),
+                        "error_code": "PROGRESSIVE_OPERATION_FAILED",
+                        "data": {
+                            "trashed_count": result.get("trashed_count", 0),
+                            "status_message": result.get("error_message", "Failed to trash emails")
+                        }
+                    }
             else:
-                status_msg = f"Operation to move {len(message_ids)} email(s) to trash reported non-true by core API."
-                logger.warning(status_msg)
-                return {"success": False, "error_message": status_msg, "error_code": "CORE_API_OPERATION_FAILED", "data": {"trashed_count": 0, "status_message": status_msg}}
+                # Standard processing (non-progressive) for single query
+                # First get the IDs
+                emails = self.damien_gmail_integration_module.list_messages(
+                    service=g_client,
+                    query_string=query,
+                    max_results=200  # Get larger batches for efficiency
+                )
+                
+                if emails and "messages" in emails:
+                    # Extract IDs
+                    batch_ids = [msg["id"] for msg in emails.get("messages", [])]
+                    
+                    if batch_ids:
+                        # Trash this batch
+                        success = self.damien_gmail_integration_module.batch_trash_messages(
+                            service=g_client,
+                            message_ids=batch_ids
+                        )
+                        
+                        if success:
+                            status_msg = f"Successfully moved {len(batch_ids)} email(s) to trash."
+                            logger.info(status_msg)
+                            return {
+                                "success": True,
+                                "data": {
+                                    "trashed_count": len(batch_ids),
+                                    "status_message": status_msg,
+                                    "mode": "query_standard"
+                                }
+                            }
+                        else:
+                            status_msg = f"Operation to move {len(batch_ids)} email(s) to trash reported non-true by core API."
+                            logger.warning(status_msg)
+                            return {
+                                "success": False,
+                                "error_message": status_msg,
+                                "error_code": "CORE_API_OPERATION_FAILED",
+                                "data": {
+                                    "trashed_count": 0,
+                                    "status_message": status_msg
+                                }
+                            }
+                else:
+                    return {
+                        "success": True,
+                        "data": {
+                            "trashed_count": 0,
+                            "status_message": "No emails found matching the query.",
+                            "mode": "query_standard"
+                        }
+                    }
+                    
         except (DamienError, GmailApiError, InvalidParameterError) as e:
-            logger.error(f"Error in trash_emails_tool for IDs {message_ids}: {e}", exc_info=True)
-            return {"success": False, "error_message": str(e), "error_code": e.__class__.__name__, "data": {"trashed_count": 0, "status_message": str(e)}}
+            logger.error(f"Error in trash_emails_tool: {e}", exc_info=True)
+            return {
+                "success": False, 
+                "error_message": str(e), 
+                "error_code": e.__class__.__name__, 
+                "data": {
+                    "trashed_count": 0, 
+                    "status_message": str(e)
+                }
+            }
         except Exception as e:
-            logger.error(f"Unexpected error in trash_emails_tool for IDs {message_ids}: {e}", exc_info=True)
-            return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR", "data": {"trashed_count": 0, "status_message": f"Unexpected error: {str(e)}"}}
+            logger.error(f"Unexpected error in trash_emails_tool: {e}", exc_info=True)
+            return {
+                "success": False, 
+                "error_message": f"Unexpected error: {str(e)}", 
+                "error_code": "UNEXPECTED_ADAPTER_ERROR", 
+                "data": {
+                    "trashed_count": 0, 
+                    "status_message": f"Unexpected error: {str(e)}"
+                }
+            }
 
     async def label_emails_tool(self, message_ids: List[str], add_label_names: Optional[List[str]], remove_label_names: Optional[List[str]]) -> Dict[str, Any]:
         if not message_ids: return {"success": False, "error_message": "No message IDs provided to label.", "error_code": "INVALID_PARAMETER", "data": {"modified_count": 0, "status_message": "No message IDs provided."}}

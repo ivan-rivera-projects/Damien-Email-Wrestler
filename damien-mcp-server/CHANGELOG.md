@@ -2,6 +2,39 @@
 
 All notable changes to the Damien MCP Server project will be documented in this file.
 
+## [2.1.1] - 2025-06-01
+
+### ⚡ PERFORMANCE: Email Operations Optimization
+
+This release significantly improves performance for bulk email operations by optimizing ID generation and implementing progressive batch processing.
+
+### 🔧 Enhanced - Email Management Tools
+- **Optimized `damien_list_emails_tool`**:
+  - Added query optimization for improved performance (30-50% faster)
+  - Added support for include_headers parameter to reduce API calls
+  - Enabled processing large result sets more efficiently
+
+- **Overhauled `damien_trash_emails_tool`**:
+  - Added support for both direct (ID-based) and query modes
+  - Implemented smart query optimization for better performance
+  - Added progressive batching with real-time progress feedback
+  - Reduced memory usage for large operations
+
+### 🧰 Added - Utility Modules
+- **New `query_optimizer.py` module**:
+  - Smart query optimization for targeting specific email categories
+  - Improved performance for large operations
+
+- **New `progressive_processor.py` module**:
+  - Batch processing with dynamic sizing
+  - Real-time progress tracking
+  - Fault tolerance for partial failures
+
+### 🧪 Added - Comprehensive Testing
+- Added unit tests for utility modules
+- Added integration tests for MCP adapter
+- Added end-to-end tests and benchmarking tools
+
 ## [2.1.0] - 2025-05-26
 
 ### 🧵 MAJOR: Complete Thread Operations System

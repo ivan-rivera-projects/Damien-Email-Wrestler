@@ -145,6 +145,19 @@ def list_labels(service):  # Kept for potential debugging, can be removed if unu
 def list_messages(
     service, query_string: str = None, max_results: int = 10, page_token: str = None, include_headers: list = None
 ):
+    """
+    List email messages from Gmail based on a search query.
+    
+    Args:
+        service: Authenticated Gmail service object
+        query_string: Optional Gmail search query string
+        max_results: Maximum number of messages to retrieve (per page)
+        page_token: Optional token for pagination
+        include_headers: Optional list of header names to include in summaries
+        
+    Returns:
+        Dictionary containing list of messages and next page token
+    """
     if not service:
         click.echo("Damien cannot list messages: Gmail service not available.")
         return None
@@ -209,6 +222,91 @@ def list_messages(
             f"Damien encountered an unexpected error while listing messages: {e}"
         )
         return None
+
+
+async def trash_emails_progressively(
+    service, query_string: str, estimated_count: int = None, batch_sizing: dict = None
+):
+    """
+    Trash emails progressively with real-time feedback.
+    
+    Args:
+        service: Authenticated Gmail service object
+        query_string: Gmail search query string
+        estimated_count: Estimated number of emails to trash
+        batch_sizing: Optional batch size configuration
+        
+    Returns:
+        Dictionary with operation results
+    """
+    from damien_cli.utilities.progressive_processor import progressive_batch_operation
+    
+    if not service:
+        click.echo("Damien cannot trash emails: Gmail service not available.")
+        return {
+            "success": False,
+            "error_message": "Gmail service not available",
+            "trashed_count": 0
+        }
+    
+    # Create wrapper functions for progressive processor
+    async def fetch_messages(query, max_results, page_token):
+        return list_messages(
+            service=service,
+            query_string=query,
+            max_results=max_results,
+            page_token=page_token
+        )
+    
+    async def process_batch(message_ids):
+        from damien_cli.core_api.gmail_api_service import batch_modify_message_labels
+        
+        result = batch_modify_message_labels(
+            gmail_service=service,
+            message_ids=message_ids,
+            add_label_names=["TRASH"],
+            remove_label_names=["INBOX"]
+        )
+        return result
+    
+    # Track the total trashed
+    total_trashed = 0
+    
+    # Process emails progressively
+    try:
+        async for progress in progressive_batch_operation(
+            fetch_function=fetch_messages,
+            process_function=process_batch,
+            query=query_string,
+            estimated_count=estimated_count,
+            batch_sizing=batch_sizing,
+            operation_name="trash"
+        ):
+            # If this is the final update, save the total
+            if progress.get("operation_complete", False):
+                total_trashed = progress.get("total_trashed", 0)
+                
+            # Propagate any error
+            if not progress.get("success", True):
+                return {
+                    "success": False,
+                    "error_message": progress.get("error", "Unknown error during trash operation"),
+                    "trashed_count": progress.get("total_trashed", 0)
+                }
+                
+        return {
+            "success": True,
+            "trashed_count": total_trashed,
+            "message": f"Successfully trashed {total_trashed} emails"
+        }
+        
+    except Exception as e:
+        click.echo(f"Damien encountered an error during progressive trash operation: {e}")
+        return {
+            "success": False,
+            "error_message": str(e),
+            "trashed_count": total_trashed
+        }
 
 
 def get_message_details(service, message_id: str, email_format: str = "metadata"):
