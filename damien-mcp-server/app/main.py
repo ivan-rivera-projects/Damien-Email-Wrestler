@@ -39,6 +39,7 @@ from .tools.draft_tools import register_draft_tools
 from .tools.settings_tools import register_settings_tools
 from .tools.thread_tools import register_thread_tools
 from .tools.register_ai_intelligence import register_ai_intelligence_tools
+from .tools.async_tools import register_async_tools
 from .services.tool_registry import tool_registry
 
 @app.on_event("startup")
@@ -49,9 +50,11 @@ async def startup_event():
     register_settings_tools()
     register_thread_tools()
     register_ai_intelligence_tools()  # 🚀 Phase 4: AI Intelligence Tools
+    register_async_tools()  # 🔥 Background Job Processing Tools
     
     logger.info(f"🎉 MCP Server started with {len(tool_registry.get_all_tools())} tools registered")
     logger.info("✅ Phase 4 AI Intelligence integration complete!")
+    logger.info("🚀 Background job processing system active!")
 
 
 @app.get("/health", summary="Health Check", tags=["System"])

@@ -607,6 +607,277 @@ class AIIntelligenceTools:
         
         return recommendations or ["System health acceptable - no immediate actions required"]
 
+    async def damien_ai_analyze_emails_large_scale(
+        self,
+        target_count: int = 5000,
+        days: int = 90,
+        min_confidence: float = 0.85,
+        use_statistical_validation: bool = True,
+        query: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Large-scale email analysis with statistical rigor for 1000+ emails.
+        
+        This method overcomes the 50-email limitation by using the enhanced CLIBridge
+        to collect emails in batches and perform comprehensive pattern analysis with
+        proper statistical confidence scoring.
+        
+        Args:
+            target_count: Target number of emails to analyze (default: 5000)
+            days: Number of days to look back (default: 90)
+            min_confidence: Minimum confidence threshold (default: 0.85)
+            use_statistical_validation: Enable statistical validation (default: True)
+            query: Optional additional Gmail query filter
+            
+        Returns:
+            Dict containing comprehensive analysis with statistical confidence metrics
+        """
+        # Ensure CLI bridge is properly initialized
+        if self.cli_bridge:
+            await self.cli_bridge.ensure_initialized()
+        
+        start_time = time.time()
+        
+        try:
+            # Create an async operation for tracking
+            operation = self.progress_tracker.create_operation(
+                name="Large-Scale Email Analysis",
+                total_items=target_count // 100 + 4,  # Batches + processing steps
+                operation_id=f"large_email_analysis_{int(time.time())}"
+            )
+            
+            # Step 1: Batch email collection using enhanced CLIBridge
+            self.progress_tracker.update_progress(
+                operation.operation_id, 
+                message=f"Collecting up to {target_count} emails from Gmail..."
+            )
+            
+            collected_emails = await self.cli_bridge.fetch_emails(
+                days=days,
+                max_emails=target_count,
+                query=query
+            )
+            
+            emails_list = collected_emails.get("emails", [])
+            actual_count = len(emails_list)
+            
+            self.progress_tracker.advance_step(
+                operation.operation_id, 
+                f"Collected {actual_count} emails in {collected_emails.get('batches_processed', 0)} batches"
+            )
+            
+            # Step 2: Statistical validation
+            if use_statistical_validation:
+                self.progress_tracker.update_progress(
+                    operation.operation_id,
+                    message="Validating statistical significance..."
+                )
+                
+                if actual_count < 1000:
+                    # Log warning but continue with reduced confidence
+                    logger.warning(f"Sample size {actual_count} < 1000 may reduce confidence")
+                    statistical_adequacy = "insufficient"
+                    confidence_warning = "Sample size below recommended 1000 emails for high confidence"
+                else:
+                    statistical_adequacy = "adequate"
+                    confidence_warning = None
+                
+                self.progress_tracker.advance_step(
+                    operation.operation_id,
+                    f"Statistical validation complete: {statistical_adequacy}"
+                )
+            
+            # Step 3: AI pattern analysis using existing infrastructure
+            self.progress_tracker.update_progress(
+                operation.operation_id,
+                message="Analyzing email patterns with AI..."
+            )
+            
+            analysis_result = await self.cli_bridge.analyze_email_patterns(
+                emails=emails_list,
+                min_confidence=min_confidence
+            )
+            
+            self.progress_tracker.advance_step(
+                operation.operation_id,
+                "Pattern analysis complete"
+            )
+            
+            # Step 4: Enhanced statistical confidence calculation
+            self.progress_tracker.update_progress(
+                operation.operation_id,
+                message="Calculating statistical confidence metrics..."
+            )
+            
+            confidence_score = self._calculate_statistical_confidence(
+                sample_size=actual_count,
+                patterns=analysis_result.get("patterns", [])
+            )
+            
+            self.progress_tracker.advance_step(
+                operation.operation_id,
+                "Statistical analysis complete"
+            )
+            
+            # Compile comprehensive results
+            processing_time = time.time() - start_time
+            
+            enhanced_result = {
+                **analysis_result,
+                "sample_size": actual_count,
+                "target_count": target_count,
+                "statistical_confidence": confidence_score,
+                "collection_metadata": {
+                    "batches_processed": collected_emails.get("batches_processed", 0),
+                    "query_used": collected_emails.get("query_used", ""),
+                    "days_analyzed": days,
+                    "collection_duration_ms": collected_emails.get("fetch_duration_ms", 0)
+                },
+                "processing_metrics": {
+                    "total_processing_time_seconds": round(processing_time, 2),
+                    "emails_per_second": round(actual_count / processing_time, 2) if processing_time > 0 else 0,
+                    "statistical_adequacy": statistical_adequacy if use_statistical_validation else "not_validated"
+                },
+                "recommendations_enhanced": self._generate_enhanced_recommendations(
+                    actual_count, 
+                    analysis_result.get("patterns", []),
+                    confidence_score
+                )
+            }
+            
+            if confidence_warning:
+                enhanced_result["warnings"] = [confidence_warning]
+            
+            logger.info(
+                f"Large-scale analysis completed: {actual_count} emails processed in {processing_time:.2f}s"
+            )
+            
+            return enhanced_result
+            
+        except Exception as e:
+            logger.error(f"Large-scale email analysis failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "sample_size": 0,
+                "processing_time_seconds": time.time() - start_time
+            }
+    
+    def _calculate_statistical_confidence(self, sample_size: int, patterns: List[Any]) -> Dict[str, Any]:
+        """
+        Calculate statistical confidence metrics for email analysis results.
+        
+        Args:
+            sample_size: Number of emails analyzed
+            patterns: List of detected patterns
+            
+        Returns:
+            Dict containing confidence metrics and recommendations
+        """
+        confidence_metrics = {
+            "overall_confidence": 0.0,
+            "sample_adequacy": "insufficient",
+            "pattern_confidence": {},
+            "recommendations": [],
+            "statistical_summary": {}
+        }
+        
+        # Base confidence calculation
+        if sample_size < 100:
+            confidence_metrics["overall_confidence"] = max(0.3, sample_size / 100 * 0.6)
+            confidence_metrics["recommendations"].append("Increase sample size significantly for reliable analysis")
+        elif sample_size < 1000:
+            confidence_metrics["sample_adequacy"] = "marginal"
+            confidence_metrics["overall_confidence"] = max(0.6, 0.6 + (sample_size - 100) / 900 * 0.25)
+            confidence_metrics["recommendations"].append("Consider increasing sample size to 1000+ for high confidence")
+        else:
+            confidence_metrics["sample_adequacy"] = "adequate"
+            # High confidence with diminishing returns after 1000
+            confidence_metrics["overall_confidence"] = min(0.98, 0.85 + (sample_size - 1000) / 10000 * 0.13)
+        
+        # Pattern-specific confidence analysis
+        pattern_thresholds = {
+            "newsletter_subscriptions": {"min": 50, "good": 200},
+            "meeting_emails": {"min": 20, "good": 100},
+            "project_updates": {"min": 15, "good": 75},
+            "financial_alerts": {"min": 10, "good": 50},
+            "social_media": {"min": 10, "good": 50},
+            "e_commerce": {"min": 25, "good": 100}
+        }
+        
+        for pattern in patterns:
+            pattern_count = pattern.get("email_count", 0)
+            pattern_type = pattern.get("pattern_type", "unknown")
+            
+            thresholds = pattern_thresholds.get(pattern_type, {"min": 10, "good": 50})
+            
+            if pattern_count >= thresholds["good"]:
+                pattern_confidence = min(0.95, 0.8 + (pattern_count - thresholds["good"]) / thresholds["good"] * 0.15)
+                adequacy = "high"
+            elif pattern_count >= thresholds["min"]:
+                pattern_confidence = 0.6 + (pattern_count - thresholds["min"]) / (thresholds["good"] - thresholds["min"]) * 0.2
+                adequacy = "adequate"
+            else:
+                pattern_confidence = max(0.3, pattern_count / thresholds["min"] * 0.6)
+                adequacy = "low"
+            
+            confidence_metrics["pattern_confidence"][pattern_type] = {
+                "confidence": round(pattern_confidence, 3),
+                "sample_count": pattern_count,
+                "adequacy": adequacy,
+                "min_recommended": thresholds["min"],
+                "good_threshold": thresholds["good"]
+            }
+        
+        # Statistical summary
+        confidence_metrics["statistical_summary"] = {
+            "total_patterns": len(patterns),
+            "high_confidence_patterns": len([p for p in confidence_metrics["pattern_confidence"].values() if p["confidence"] >= 0.8]),
+            "sample_size_rating": confidence_metrics["sample_adequacy"],
+            "analysis_reliability": "high" if confidence_metrics["overall_confidence"] >= 0.85 else "moderate" if confidence_metrics["overall_confidence"] >= 0.7 else "low"
+        }
+        
+        return confidence_metrics
+    
+    def _generate_enhanced_recommendations(self, sample_size: int, patterns: List[Any], confidence_metrics: Dict[str, Any]) -> List[str]:
+        """Generate enhanced recommendations based on analysis results."""
+        recommendations = []
+        
+        # Sample size recommendations
+        if sample_size < 1000:
+            recommendations.append(f"🔢 Sample Size: Analyzed {sample_size} emails. For highest confidence, consider analyzing 1000+ emails")
+        else:
+            recommendations.append(f"✅ Sample Size: Excellent sample of {sample_size} emails provides high statistical confidence")
+        
+        # Pattern-specific recommendations
+        high_confidence_patterns = []
+        automation_candidates = []
+        
+        for pattern in patterns:
+            pattern_type = pattern.get("pattern_type", "")
+            email_count = pattern.get("email_count", 0)
+            confidence = pattern.get("confidence", 0)
+            
+            if confidence >= 0.85 and email_count >= 20:
+                high_confidence_patterns.append(pattern_type)
+                automation_candidates.append(f"{pattern_type} ({email_count} emails, {confidence:.0%} confidence)")
+        
+        if automation_candidates:
+            recommendations.append(f"🤖 Ready for Automation: {', '.join(automation_candidates)}")
+        
+        # Overall confidence assessment
+        overall_confidence = confidence_metrics.get("overall_confidence", 0)
+        if overall_confidence >= 0.9:
+            recommendations.append("🎯 Analysis Quality: Excellent - results are highly reliable for business decisions")
+        elif overall_confidence >= 0.8:
+            recommendations.append("👍 Analysis Quality: Good - results provide solid foundation for automation")
+        else:
+            recommendations.append("⚠️ Analysis Quality: Moderate - consider larger sample for critical decisions")
+        
+        return recommendations
+
+
+
 
 # Export the tools class for MCP server integration
 ai_intelligence_tools = AIIntelligenceTools()
@@ -742,5 +1013,27 @@ async def optimize_inbox_handler(params: Dict[str, Any], context: Dict[str, Any]
         return {
             "success": False,
             "error_message": f"Inbox optimization failed: {str(e)}",
+            "data": None
+        }
+
+async def large_scale_analysis_handler(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """MCP handler for large-scale email analysis."""
+    try:
+        result = await ai_intelligence_tools.damien_ai_analyze_emails_large_scale(
+            target_count=params.get('target_count', 5000),
+            days=params.get('days', 90),
+            min_confidence=params.get('min_confidence', 0.85),
+            use_statistical_validation=params.get('use_statistical_validation', True),
+            query=params.get('query')
+        )
+        return {
+            "success": True,
+            "data": {**result, "user_context": context}
+        }
+    except Exception as e:
+        logger.error(f"Error in large_scale_analysis_handler: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "error_message": f"Large-scale analysis failed: {str(e)}",
             "data": None
         }

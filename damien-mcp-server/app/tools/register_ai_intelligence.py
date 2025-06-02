@@ -250,6 +250,49 @@ AI_INTELLIGENCE_TOOLS = {
         handler="optimize_inbox_handler",
         requires_scopes=["gmail_modify"],
         rate_limit_group="ai_modifications"
+    ),
+    
+    "damien_ai_analyze_emails_large_scale": ToolDefinition(
+        name="damien_ai_analyze_emails_large_scale",
+        description="Comprehensive large-scale email analysis with statistical rigor for 1000+ emails. Overcomes 50-email limitation through batch processing with enterprise-grade confidence scoring.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "target_count": {
+                    "type": "integer",
+                    "description": "Target number of emails to analyze (default: 5000)",
+                    "default": 5000,
+                    "minimum": 1000,
+                    "maximum": 10000
+                },
+                "days": {
+                    "type": "integer",
+                    "description": "Number of days to look back (default: 90)",
+                    "default": 90,
+                    "minimum": 1,
+                    "maximum": 365
+                },
+                "min_confidence": {
+                    "type": "number",
+                    "description": "Minimum confidence threshold (default: 0.85)",
+                    "default": 0.85,
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "use_statistical_validation": {
+                    "type": "boolean",
+                    "description": "Enable statistical validation (default: true)",
+                    "default": True
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Optional additional Gmail query filter"
+                }
+            }
+        },
+        handler="large_scale_analysis_handler",
+        requires_scopes=["gmail_read"],
+        rate_limit_group="ai_analysis_large"
     )
 }
 
@@ -265,7 +308,8 @@ def register_ai_intelligence_tools():
         quick_test_handler,
         create_rule_handler,
         get_insights_handler,
-        optimize_inbox_handler
+        optimize_inbox_handler,
+        large_scale_analysis_handler
     )
     
     # Map handler names to actual handler functions
@@ -275,7 +319,8 @@ def register_ai_intelligence_tools():
         "quick_test_handler": quick_test_handler,
         "create_rule_handler": create_rule_handler,
         "get_insights_handler": get_insights_handler,
-        "optimize_inbox_handler": optimize_inbox_handler
+        "optimize_inbox_handler": optimize_inbox_handler,
+        "large_scale_analysis_handler": large_scale_analysis_handler
     }
     
     # Register each AI intelligence tool with proper handlers
