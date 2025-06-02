@@ -1162,75 +1162,216 @@ class CLIBridge:
                 }
     
     async def analyze_email_patterns(self, emails: List[Any], min_confidence: float = 0.7) -> Dict[str, Any]:
-        """Analyze email patterns using AI components."""
+        """Analyze email patterns using REAL email analysis instead of mock data."""
         async with self._performance_context("analyze_email_patterns"):
             if not emails:
                 return {"patterns": [], "success": False, "reason": "no_emails_provided"}
             
-            # Mock pattern analysis - in production would use actual AI components
-            patterns = [
-                {
-                    "pattern_type": "meeting_emails",
-                    "email_count": 12,
-                    "confidence": 0.85,
-                    "description": "Regular meeting invitations and responses"
-                },
-                {
-                    "pattern_type": "project_updates", 
-                    "email_count": 8,
-                    "confidence": 0.78,
-                    "description": "Weekly project status updates"
-                },
-                {
-                    "pattern_type": "newsletter_subscriptions",
-                    "email_count": 15,
-                    "confidence": 0.92,
-                    "description": "Marketing and newsletter emails"
-                }
-            ]
+            logger.info(f"🔍 Analyzing {len(emails)} emails for patterns (min_confidence: {min_confidence})")
             
-            # Filter by confidence
+            # REAL ANALYSIS: Analyze actual email content and metadata
+            patterns = []
+            
+            # Pattern 1: Meeting emails detection
+            meeting_keywords = ['meeting', 'invite', 'invitation', 'calendar', 'schedule', 'zoom', 'teams', 'webex', 'conference', 'call']
+            meeting_emails = []
+            for email in emails:
+                subject = email.get('Subject', email.get('subject', '')).lower()
+                snippet = email.get('snippet', '').lower()
+                if any(keyword in subject or keyword in snippet for keyword in meeting_keywords):
+                    meeting_emails.append(email)
+            
+            if len(meeting_emails) >= 2:  # Lower threshold for pattern detection
+                patterns.append({
+                    "pattern_type": "meeting_emails",
+                    "email_count": len(meeting_emails),
+                    "confidence": min(0.95, 0.6 + (len(meeting_emails) / len(emails) * 0.4)),
+                    "description": f"Meeting invitations and calendar events ({len(meeting_emails)} emails)",
+                    "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in meeting_emails[:3]]
+                })
+            
+            # Pattern 2: Newsletter/Marketing emails (improved detection)
+            newsletter_indicators = ['unsubscribe', 'newsletter', 'marketing', 'promotion', 'sale', 'offer', 'deal', '%', 'discount', 'alert', 'notification']
+            marketing_domains = ['marketing.', 'newsletter.', 'news.', 'hello@', 'noreply', 'no-reply', 'alerts@', 'jobalerts', 'notifications@']
+            unsubscribe_emails = []
+            
+            for email in emails:
+                subject = email.get('Subject', email.get('subject', '')).lower()
+                snippet = email.get('snippet', '').lower()
+                sender = email.get('From', email.get('from', '')).lower()
+                list_unsubscribe = email.get('List-Unsubscribe', '') or email.get('list-unsubscribe', '')
+                
+                # Check multiple indicators
+                has_unsubscribe_header = bool(list_unsubscribe)
+                has_marketing_domain = any(domain in sender for domain in marketing_domains)
+                has_marketing_keywords = any(keyword in subject or keyword in snippet for keyword in newsletter_indicators)
+                
+                if has_unsubscribe_header or has_marketing_domain or has_marketing_keywords:
+                    unsubscribe_emails.append(email)
+            
+            if len(unsubscribe_emails) >= 2:
+                patterns.append({
+                    "pattern_type": "newsletter_subscriptions", 
+                    "email_count": len(unsubscribe_emails),
+                    "confidence": min(0.92, 0.65 + (len(unsubscribe_emails) / len(emails) * 0.35)),
+                    "description": f"Newsletter and marketing emails ({len(unsubscribe_emails)} emails)",
+                    "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in unsubscribe_emails[:3]]
+                })
+            
+            # Pattern 3: Job alerts and notifications  
+            job_keywords = ['job', 'hiring', 'career', 'opportunity', 'position', 'recruiter', 'linkedin', 'ziprecruiter', 'indeed']
+            job_domains = ['linkedin', 'ziprecruiter', 'indeed', 'glassdoor', 'monster', 'career']
+            job_emails = []
+            
+            for email in emails:
+                subject = email.get('Subject', email.get('subject', '')).lower()
+                sender = email.get('From', email.get('from', '')).lower()
+                snippet = email.get('snippet', '').lower()
+                
+                has_job_keywords = any(keyword in subject or keyword in snippet for keyword in job_keywords)
+                has_job_domain = any(domain in sender for domain in job_domains)
+                
+                if has_job_keywords or has_job_domain:
+                    job_emails.append(email)
+            
+            if len(job_emails) >= 2:
+                patterns.append({
+                    "pattern_type": "job_alerts",
+                    "email_count": len(job_emails),
+                    "confidence": min(0.88, 0.7 + (len(job_emails) / len(emails) * 0.25)),
+                    "description": f"Job alerts and career opportunities ({len(job_emails)} emails)",
+                    "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in job_emails[:3]]
+                })
+            
+            # Pattern 4: Automated system emails
+            system_keywords = ['noreply', 'no-reply', 'notification', 'alert', 'automated', 'system', 'support', 'account', 'security', 'update']
+            system_emails = []
+            for email in emails:
+                sender = email.get('From', email.get('from', '')).lower()
+                subject = email.get('Subject', email.get('subject', '')).lower()
+                if (any(keyword in sender for keyword in system_keywords) or
+                    any(keyword in subject for keyword in ['notification', 'alert', 'update', 'security', 'account'])):
+                    system_emails.append(email)
+            
+            if len(system_emails) >= 2:
+                patterns.append({
+                    "pattern_type": "system_notifications",
+                    "email_count": len(system_emails),
+                    "confidence": min(0.88, 0.6 + (len(system_emails) / len(emails) * 0.35)),
+                    "description": f"Automated system notifications ({len(system_emails)} emails)",
+                    "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in system_emails[:3]]
+                })
+            
+            # Pattern 5: Domain analysis (professional communications)
+            domain_groups = {}
+            for email in emails:
+                sender = email.get('From', email.get('from', ''))
+                if '@' in sender:
+                    # Extract domain, handling email format "Name <email@domain.com>"
+                    if '<' in sender and '>' in sender:
+                        email_part = sender.split('<')[1].split('>')[0]
+                    else:
+                        email_part = sender
+                    
+                    if '@' in email_part:
+                        domain = email_part.split('@')[1].lower().strip()
+                        if domain not in domain_groups:
+                            domain_groups[domain] = []
+                        domain_groups[domain].append(email)
+            
+            # Find domains with significant email volume (excluding common consumer domains)
+            excluded_domains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com']
+            for domain, domain_emails in domain_groups.items():
+                if (len(domain_emails) >= 3 and 
+                    domain not in excluded_domains and 
+                    len(domain) > 3):  # Avoid very short/invalid domains
+                    patterns.append({
+                        "pattern_type": "domain_communications",
+                        "email_count": len(domain_emails),
+                        "confidence": min(0.85, 0.5 + (len(domain_emails) / len(emails) * 0.5)),
+                        "description": f"Regular communications from {domain} ({len(domain_emails)} emails)",
+                        "domain": domain,
+                        "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in domain_emails[:3]]
+                    })
+            
+            # Filter by confidence threshold
             high_confidence_patterns = [p for p in patterns if p["confidence"] >= min_confidence]
+            
+            # Calculate statistics
+            total_pattern_emails = sum(p["email_count"] for p in high_confidence_patterns)
+            coverage_percentage = (total_pattern_emails / len(emails)) * 100 if emails else 0
+            
+            logger.info(f"✅ Found {len(high_confidence_patterns)} high-confidence patterns covering {coverage_percentage:.1f}% of emails")
+            for pattern in high_confidence_patterns:
+                logger.info(f"   📊 {pattern['pattern_type']}: {pattern['email_count']} emails (confidence: {pattern['confidence']:.2f})")
             
             return {
                 "patterns": high_confidence_patterns,
                 "total_patterns": len(patterns),
                 "high_confidence_patterns": len(high_confidence_patterns),
+                "emails_analyzed": len(emails),
+                "pattern_coverage_percentage": round(coverage_percentage, 1),
                 "success": True,
-                "analysis_method": "mock_analysis"
+                "analysis_method": "real_content_analysis",
+                "confidence_threshold": min_confidence
             }
     
     async def generate_business_insights(self, analysis_data: Dict[str, Any], output_format: str = "summary") -> Dict[str, Any]:
-        """Generate business insights from analysis data."""
+        """Generate business insights from REAL analysis data."""
         async with self._performance_context("generate_business_insights"):
             patterns = analysis_data.get("patterns", [])
+            emails_analyzed = analysis_data.get("emails_analyzed", 0)
             
-            # Calculate insights
-            total_emails = sum(p.get("email_count", 0) for p in patterns)
+            # Calculate REAL insights based on actual analysis
+            total_pattern_emails = sum(p.get("email_count", 0) for p in patterns)
             automation_opportunities = self._identify_automation_opportunities(patterns)
-            time_savings = self._calculate_time_savings(patterns, total_emails)
-            pattern_distribution = self._calculate_pattern_distribution(patterns)
+            time_savings = self._calculate_time_savings(patterns, emails_analyzed)
+            pattern_distribution = self._calculate_pattern_distribution(patterns, total_pattern_emails)
+            
+            # Generate specific recommendations based on actual patterns found
+            recommendations = []
+            for pattern in patterns:
+                pattern_type = pattern.get("pattern_type", "")
+                count = pattern.get("email_count", 0)
+                confidence = pattern.get("confidence", 0)
+                
+                if pattern_type == "meeting_emails" and count >= 5:
+                    recommendations.append(f"Create automatic meeting response rule for {count} meeting emails")
+                elif pattern_type == "newsletter_subscriptions" and count >= 5:
+                    recommendations.append(f"Set up auto-archive rule for {count} newsletter emails")
+                elif pattern_type == "system_notifications" and count >= 3:
+                    recommendations.append(f"Create filtering rule for {count} system notifications")
+                elif pattern_type == "domain_communications" and count >= 5:
+                    domain = pattern.get("domain", "unknown")
+                    recommendations.append(f"Consider priority labeling for {count} emails from {domain}")
+            
+            if not recommendations:
+                recommendations = ["Analyze more emails to identify automation opportunities"]
             
             insights = {
-                "total_emails_analyzed": total_emails,
+                "total_emails_analyzed": emails_analyzed,
                 "patterns_identified": len(patterns),
+                "emails_with_patterns": total_pattern_emails,
+                "pattern_coverage_percentage": analysis_data.get("pattern_coverage_percentage", 0),
                 "automation_opportunities": automation_opportunities,
                 "estimated_time_savings_hours": time_savings,
                 "pattern_distribution": pattern_distribution,
                 "reliability_score": self._calculate_reliability_score(analysis_data),
-                "recommendations": [
-                    "Consider automating meeting email responses",
-                    "Set up newsletter filtering rules",
-                    "Implement project update categorization"
-                ]
+                "recommendations": recommendations
             }
             
             if output_format == "detailed":
                 insights["detailed_patterns"] = patterns
                 insights["efficiency_metrics"] = {
-                    "processing_speed": "fast",
+                    "processing_speed": "optimized",
                     "accuracy_estimate": 0.87,
-                    "coverage": "comprehensive"
+                    "coverage": f"{analysis_data.get('pattern_coverage_percentage', 0):.1f}%",
+                    "confidence_threshold": analysis_data.get("confidence_threshold", 0.7)
+                }
+                insights["analysis_metadata"] = {
+                    "method": analysis_data.get("analysis_method", "unknown"),
+                    "total_patterns_found": analysis_data.get("total_patterns", 0),
+                    "high_confidence_patterns": analysis_data.get("high_confidence_patterns", 0)
                 }
             
             return insights
@@ -1514,3 +1655,165 @@ class CLIBridge:
             except Exception as e:
                 logger.error(f"Failed to call tool {tool_name}: {e}")
                 raise
+    
+    # ============================================================================
+    # Helper Methods for Real Analysis
+    # ============================================================================
+    
+    def _identify_automation_opportunities(self, patterns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Identify specific automation opportunities from real patterns."""
+        opportunities = []
+        
+        for pattern in patterns:
+            pattern_type = pattern.get("pattern_type", "")
+            count = pattern.get("email_count", 0)
+            confidence = pattern.get("confidence", 0)
+            
+            if pattern_type == "meeting_emails" and count >= 2 and confidence >= 0.7:
+                opportunities.append({
+                    "type": "calendar_integration", 
+                    "pattern": "meeting_emails",
+                    "potential_savings": f"{count * 2} minutes/week",
+                    "confidence": confidence,
+                    "priority": "high",
+                    "description": f"Auto-respond to {count} meeting invitations"
+                })
+            
+            elif pattern_type == "newsletter_subscriptions" and count >= 2 and confidence >= 0.7:
+                opportunities.append({
+                    "type": "auto_archive",
+                    "pattern": "newsletter_subscriptions", 
+                    "potential_savings": f"{count * 1} minutes/week",
+                    "confidence": confidence,
+                    "priority": "medium",
+                    "description": f"Auto-archive {count} newsletter emails"
+                })
+            
+            elif pattern_type == "job_alerts" and count >= 2 and confidence >= 0.7:
+                opportunities.append({
+                    "type": "smart_filtering",
+                    "pattern": "job_alerts",
+                    "potential_savings": f"{count * 1.2} minutes/week",
+                    "confidence": confidence,
+                    "priority": "medium", 
+                    "description": f"Filter and organize {count} job alerts"
+                })
+            
+            elif pattern_type == "system_notifications" and count >= 2 and confidence >= 0.7:
+                opportunities.append({
+                    "type": "smart_filtering",
+                    "pattern": "system_notifications",
+                    "potential_savings": f"{count * 0.5} minutes/week", 
+                    "confidence": confidence,
+                    "priority": "medium",
+                    "description": f"Filter {count} system notifications"
+                })
+            
+            elif pattern_type == "domain_communications" and count >= 3 and confidence >= 0.7:
+                domain = pattern.get("domain", "unknown")
+                opportunities.append({
+                    "type": "priority_labeling",
+                    "pattern": "domain_communications",
+                    "potential_savings": f"{count * 1.5} minutes/week",
+                    "confidence": confidence,
+                    "priority": "medium",
+                    "description": f"Priority label for {count} emails from {domain}"
+                })
+        
+        return opportunities
+    
+    def _calculate_time_savings(self, patterns: List[Dict[str, Any]], total_emails: int) -> float:
+        """Calculate realistic time savings based on actual patterns."""
+        total_savings_minutes_per_week = 0
+        
+        for pattern in patterns:
+            count = pattern.get("email_count", 0)
+            pattern_type = pattern.get("pattern_type", "")
+            confidence = pattern.get("confidence", 0)
+            
+            # Time savings per email type (minutes per email per week)
+            if pattern_type == "meeting_emails":
+                time_per_email = 2.0  # 2 minutes saved per meeting email
+            elif pattern_type == "newsletter_subscriptions":
+                time_per_email = 1.0  # 1 minute saved per newsletter
+            elif pattern_type == "job_alerts":
+                time_per_email = 1.2  # 1.2 minutes saved per job alert
+            elif pattern_type == "system_notifications":
+                time_per_email = 0.5  # 30 seconds saved per notification
+            elif pattern_type == "domain_communications":
+                time_per_email = 1.5  # 1.5 minutes saved per domain email
+            else:
+                time_per_email = 0.5  # Default minimal savings
+            
+            # Apply confidence multiplier
+            pattern_savings = count * time_per_email * confidence
+            total_savings_minutes_per_week += pattern_savings
+        
+        # Convert to hours and add realistic overhead factor
+        total_savings_hours = (total_savings_minutes_per_week / 60) * 0.8  # 80% efficiency factor
+        return round(total_savings_hours, 2)
+    
+    def _calculate_pattern_distribution(self, patterns: List[Dict[str, Any]], total_pattern_emails: int) -> Dict[str, float]:
+        """Calculate percentage distribution of patterns."""
+        if not patterns or total_pattern_emails == 0:
+            return {}
+        
+        distribution = {}
+        for pattern in patterns:
+            pattern_type = pattern.get("pattern_type", "unknown")
+            count = pattern.get("email_count", 0)
+            percentage = (count / total_pattern_emails) * 100
+            
+            # Use more user-friendly names
+            friendly_names = {
+                "meeting_emails": "meeting",
+                "newsletter_subscriptions": "newsletter_subscriptions", 
+                "job_alerts": "job_alerts",
+                "system_notifications": "system_notifications",
+                "domain_communications": "work_communications"
+            }
+            
+            display_name = friendly_names.get(pattern_type, pattern_type)
+            distribution[display_name] = round(percentage, 1)
+        
+        return distribution
+    
+    def _calculate_reliability_score(self, analysis_data: Dict[str, Any]) -> float:
+        """Calculate analysis reliability score based on real data quality."""
+        emails_analyzed = analysis_data.get("emails_analyzed", 0)
+        patterns_found = analysis_data.get("high_confidence_patterns", 0)
+        coverage_percentage = analysis_data.get("pattern_coverage_percentage", 0)
+        
+        # Base score from sample size
+        if emails_analyzed >= 200:
+            sample_score = 0.9
+        elif emails_analyzed >= 100:
+            sample_score = 0.8
+        elif emails_analyzed >= 50:
+            sample_score = 0.7
+        else:
+            sample_score = 0.5
+        
+        # Pattern quality score
+        if patterns_found >= 3:
+            pattern_score = 0.9
+        elif patterns_found >= 2:
+            pattern_score = 0.8
+        elif patterns_found >= 1:
+            pattern_score = 0.7
+        else:
+            pattern_score = 0.4
+        
+        # Coverage score
+        if coverage_percentage >= 70:
+            coverage_score = 0.9
+        elif coverage_percentage >= 50:
+            coverage_score = 0.8
+        elif coverage_percentage >= 30:
+            coverage_score = 0.7
+        else:
+            coverage_score = 0.5
+        
+        # Weighted average
+        final_score = (sample_score * 0.4) + (pattern_score * 0.3) + (coverage_score * 0.3)
+        return round(final_score, 2)

@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 
 from ..services.async_processor import AsyncTaskProcessor, TaskStatus
-from ..services.tool_registry import tool_registry
+from ..services.tool_registry import tool_registry, ToolDefinition
 
 logger = logging.getLogger("damien_mcp_server_app")
 
@@ -32,22 +32,44 @@ async def damien_ai_analyze_emails_async_handler(params: Dict[str, Any], context
         # Define the async email analysis function
         async def analyze_emails_task(task_params):
             # Import here to avoid circular imports
-            from ..services.damien_adapter import DamienAdapter
-            from ..dependencies.dependencies_service import get_damien_adapter_instance
+            from ..services.cli_bridge import CLIBridge
             
-            # Get adapter instance
-            adapter = get_damien_adapter_instance()
+            # Get CLI bridge instance for large-scale operations
+            cli_bridge = CLIBridge()
+            await cli_bridge.ensure_initialized()
             
-            # Call the large-scale analysis tool
-            result = await adapter.ai_analyze_emails_large_scale_tool(
+            # Fetch emails using the working email fetching mechanism
+            emails_result = await cli_bridge.fetch_emails(
                 days=task_params["days"],
-                target_count=task_params["target_count"],
-                min_confidence=task_params["min_confidence"],
-                query=task_params["query"],
-                use_statistical_validation=task_params["use_statistical_validation"]
+                max_emails=task_params["target_count"],
+                query=task_params["query"]
             )
             
-            return result
+            # Analyze patterns using the fixed analysis method
+            analysis_result = await cli_bridge.analyze_email_patterns(
+                emails=emails_result.get("emails", []),
+                min_confidence=task_params["min_confidence"]
+            )
+            
+            # Generate business insights
+            insights_result = await cli_bridge.generate_business_insights(
+                analysis_data=analysis_result,
+                output_format="detailed"
+            )
+            
+            # Return comprehensive results
+            return {
+                "status": "success",
+                "emails_analyzed": len(emails_result.get("emails", [])),
+                "patterns_detected": len(analysis_result.get("patterns", [])),
+                "insights": insights_result,
+                "processing_metadata": {
+                    "emails_fetched": emails_result.get("total_fetched", 0),
+                    "pattern_coverage_percentage": analysis_result.get("pattern_coverage_percentage", 0),
+                    "confidence_threshold": task_params["min_confidence"],
+                    "use_statistical_validation": task_params["use_statistical_validation"]
+                }
+            }
         
         # Submit task for background processing
         task_id = await async_processor.submit_task(
@@ -217,7 +239,7 @@ async def damien_job_list_handler(params: Dict[str, Any], context: Dict[str, Any
 
 def register_async_tools():
     """Register all async job processing tools."""
-    from ..services.tool_registry import ToolDefinition
+    logger.info("🚀 Starting registration of async job processing tools...")
     
     # Async email analysis tool
     tool_def1 = ToolDefinition(
@@ -329,4 +351,8 @@ def register_async_tools():
     )
     tool_registry.register_tool(tool_def5, damien_job_list_handler)
     
-    logger.info("✅ Registered 5 async job processing tools")
+    logger.info("✅ Successfully registered 5 async job processing tools")
+
+
+# Export registration function
+__all__ = ["register_async_tools"]
