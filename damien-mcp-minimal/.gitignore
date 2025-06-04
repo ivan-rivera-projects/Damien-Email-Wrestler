@@ -1,0 +1,41 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Log files
+logs/*.log
+*.log
+
+# Backup files
+backups/damien_mcp_backup_*
+*.bak
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# Build artifacts
+dist/
+build/
+*.tsbuildinfo
+
+# Temporary files
+tmp/
+temp/

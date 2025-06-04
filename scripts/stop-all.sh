@@ -44,14 +44,14 @@ stop_service_on_port() {
 
 # Stop services
 echo ""
-#stop_service_on_port 8894 "Damien MCP Server"
 stop_service_on_port 8892 "Damien MCP Server"
+stop_service_on_port 8893 "Damien Minimal MCP Server"
 stop_service_on_port 8081 "Smithery Adapter"
 
 # Also look for any npm processes related to our services
 echo ""
 echo "Checking for any remaining Damien processes..."
-remaining=$(ps aux | grep -E "(damien-mcp-server|damien-smithery-adapter|stdioServer)" | grep -v grep | grep -v stop-all.sh)
+remaining=$(ps aux | grep -E "(damien-mcp-server|damien-mcp-minimal|damien-smithery-adapter|stdioServer)" | grep -v grep | grep -v stop-all.sh)
 
 if [ -n "$remaining" ]; then
     echo -e "${YELLOW}Found remaining processes:${NC}"
@@ -89,12 +89,16 @@ echo "📊 Service Status"
 echo "================"
 
 # Check if services are still running
-if lsof -ti :8894 > /dev/null 2>&1; then
-    echo -e "${RED}✗ Damien MCP Server: Still running on port 8894${NC}"
-elif lsof -ti :8892 > /dev/null 2>&1; then
+if lsof -ti :8892 > /dev/null 2>&1; then
     echo -e "${RED}✗ Damien MCP Server: Still running on port 8892${NC}"
 else
     echo -e "${GREEN}✓ Damien MCP Server: Stopped${NC}"
+fi
+
+if lsof -ti :8893 > /dev/null 2>&1; then
+    echo -e "${RED}✗ Damien Minimal MCP Server: Still running on port 8893${NC}"
+else
+    echo -e "${GREEN}✓ Damien Minimal MCP Server: Stopped${NC}"
 fi
 
 if lsof -ti :8081 > /dev/null 2>&1; then

@@ -1,0 +1,54 @@
+{
+  "name": "damien-mcp-minimal",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Minimal Claude MAX-compatible MCP server for Damien Email Wrestler",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/basic-test.js",
+    "test:all": "./scripts/run-tests.sh --all",
+    "test:basic": "./scripts/run-tests.sh --basic-only",
+    "test:compat": "node tests/claude-max-compatibility.test.js",
+    "test:phase": "node tests/phase-progression.test.js",
+    "test:all-phases": "node tests/run-all-phases.js",
+    "test:integration": "node tests/integration.test.js",
+    "benchmark": "./scripts/run-tests.sh --benchmark",
+    "deploy": "./scripts/deploy-minimal.sh",
+    "deploy:dry-run": "./scripts/deploy-minimal.sh --dry-run",
+    "rollback": "./scripts/rollback-minimal.sh --latest",
+    "rollback:list": "./scripts/rollback-minimal.sh --list",
+    "migrate": "./scripts/migrate-to-minimal.sh",
+    "migrate:dry-run": "./scripts/migrate-to-minimal.sh --dry-run",
+    "rollback-migration": "./scripts/rollback-from-minimal.sh",
+    "validate": "./scripts/validate-migration.sh",
+    "phase:next": "./scripts/expand-to-phase.sh",
+    "phase:2": "./scripts/expand-to-phase.sh --phase 2",
+    "phase:3": "./scripts/expand-to-phase.sh --phase 3",
+    "phase:4": "./scripts/expand-to-phase.sh --phase 4", 
+    "phase:5": "./scripts/expand-to-phase.sh --phase 5",
+    "phase:6": "./scripts/expand-to-phase.sh --phase 6",
+    "phase:rollback": "./scripts/expand-to-phase.sh --rollback",
+    "dev": "node --inspect server.js"
+  },
+  "keywords": [
+    "mcp",
+    "damien",
+    "email",
+    "claude-max",
+    "minimal"
+  ],
+  "author": "Ivan Rivera",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "dotenv": "^16.5.0",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "dotenv": "^16.5.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

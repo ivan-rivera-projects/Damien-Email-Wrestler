@@ -206,10 +206,15 @@ class EnhancedClaudeMaxServer {
       }
 
       const response = await this.makeRequest(`${CONFIG.DAMIEN_URL}/mcp/list_tools`);
-      const rawTools = await response.json();
+      const responseData = await response.json();
+      
+      // Handle both formats: direct array or { tools: [] }
+      const rawTools = Array.isArray(responseData) ? responseData : 
+                       (responseData && responseData.tools && Array.isArray(responseData.tools)) ? 
+                       responseData.tools : [];
 
-      if (!Array.isArray(rawTools)) {
-        throw new Error('Invalid tools response: expected array');
+      if (rawTools.length === 0) {
+        throw new Error('No tools found in response');
       }
 
       log(`Received ${rawTools.length} raw tools from backend`);

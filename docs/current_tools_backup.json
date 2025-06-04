@@ -1,0 +1,1531 @@
+[
+    {
+        "name": "damien_get_vacation_settings",
+        "description": "Retrieves current vacation responder settings including enabled status, subject, message body, and schedule.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        }
+    },
+    {
+        "name": "damien_update_vacation_settings",
+        "description": "Updates vacation responder settings. Can enable/disable auto-replies and configure message content and schedule.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "description": "Whether vacation responder should be enabled"
+                },
+                "subject": {
+                    "type": "string",
+                    "description": "Subject line for auto-reply messages (required if enabled=true)",
+                    "maxLength": 500
+                },
+                "body": {
+                    "type": "string",
+                    "description": "Body text for auto-reply messages (required if enabled=true)",
+                    "maxLength": 10000
+                },
+                "start_time": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Optional start time for vacation responder (ISO 8601 format)"
+                },
+                "end_time": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Optional end time for vacation responder (ISO 8601 format)"
+                },
+                "restrict_to_contacts": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Only send auto-replies to people in contacts"
+                },
+                "restrict_to_domain": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Only send auto-replies to people in the same domain"
+                }
+            },
+            "required": [
+                "enabled"
+            ],
+            "additionalProperties": false
+        }
+    },
+    {
+        "name": "damien_get_imap_settings",
+        "description": "Retrieves current IMAP access settings for the Gmail account.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        }
+    },
+    {
+        "name": "damien_update_imap_settings",
+        "description": "Updates IMAP access settings including enable/disable and expunge behavior.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "description": "Whether IMAP access should be enabled"
+                },
+                "auto_expunge": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether to automatically expunge deleted messages"
+                },
+                "expunge_behavior": {
+                    "type": "string",
+                    "enum": [
+                        "archive",
+                        "trash",
+                        "delete"
+                    ],
+                    "default": "archive",
+                    "description": "What to do with expunged messages"
+                },
+                "max_folder_size": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000,
+                    "description": "Maximum folder size in MB (optional)"
+                }
+            },
+            "required": [
+                "enabled"
+            ],
+            "additionalProperties": false
+        }
+    },
+    {
+        "name": "damien_get_pop_settings",
+        "description": "Retrieves current POP access settings for the Gmail account.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        }
+    },
+    {
+        "name": "damien_update_pop_settings",
+        "description": "Updates POP access settings including access window and message disposition.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "access_window": {
+                    "type": "string",
+                    "enum": [
+                        "allMail",
+                        "fromNowOn",
+                        "disabled"
+                    ],
+                    "description": "When POP clients can access mail"
+                },
+                "disposition": {
+                    "type": "string",
+                    "enum": [
+                        "leaveInInbox",
+                        "archive",
+                        "trash",
+                        "delete"
+                    ],
+                    "description": "What happens to mail after POP access"
+                }
+            },
+            "required": [
+                "access_window",
+                "disposition"
+            ],
+            "additionalProperties": false
+        }
+    },
+    {
+        "name": "damien_create_draft",
+        "description": "Creates a new draft email with specified recipients, subject, and body content.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "format": "email"
+                    },
+                    "description": "List of recipient email addresses",
+                    "minItems": 1,
+                    "maxItems": 100
+                },
+                "subject": {
+                    "type": "string",
+                    "description": "Email subject line",
+                    "maxLength": 500
+                },
+                "body": {
+                    "type": "string",
+                    "description": "Email body content",
+                    "maxLength": 10000
+                },
+                "cc": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "format": "email"
+                    },
+                    "description": "Optional CC recipient email addresses",
+                    "maxItems": 50
+                },
+                "bcc": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "format": "email"
+                    },
+                    "description": "Optional BCC recipient email addresses",
+                    "maxItems": 50
+                },
+                "thread_id": {
+                    "type": "string",
+                    "description": "Optional thread ID for creating a reply draft"
+                }
+            },
+            "required": [
+                "to",
+                "subject",
+                "body"
+            ],
+            "additionalProperties": false
+        }
+    },
+    {
+        "name": "damien_update_draft",
+        "description": "Updates an existing draft email with new content.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "draft_id": {
+                    "type": "string",
+                    "description": "ID of the draft to update"
+                },
+                "to": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "format": "email"
+                    },
+                    "description": "Updated recipient email addresses",
+                    "maxItems": 100
+                },
+                "subject": {
+                    "type": "string",
+                    "description": "Updated email subject line",
+                    "maxLength": 500
+                },
+                "body": {
+                    "type": "string",
+                    "description": "Updated email body content",
+                    "maxLength": 10000
+                },
+                "cc": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "format": "email"
+                    },
+                    "description": "Updated CC recipient email addresses",
+                    "maxItems": 50
+                },
+                "bcc": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "format": "email"
+                    },
+                    "description": "Updated BCC recipient email addresses",
+                    "maxItems": 50
+                }
+            },
+            "required": [
+                "draft_id"
+            ],
+            "additionalProperties": false
+        }
+    },
+    {
+        "name": "damien_send_draft",
+        "description": "Sends an existing draft email immediately.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "draft_id": {
+                    "type": "string",
+                    "description": "ID of the draft to send"
+                }
+            },
+            "required": [
+                "draft_id"
+            ],
+            "additionalProperties": false
+        }
+    },
+    {
+        "name": "damien_list_drafts",
+        "description": "Lists draft emails with optional filtering and pagination support.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Optional Gmail search query to filter drafts (e.g., 'subject:urgent')"
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum number of drafts to return",
+                    "minimum": 1,
+                    "maximum": 500,
+                    "default": 100
+                },
+                "page_token": {
+                    "type": "string",
+                    "description": "Token for fetching the next page of results"
+                }
+            },
+            "additionalProperties": false
+        }
+    },
+    {
+        "name": "damien_get_draft_details",
+        "description": "Retrieves detailed information about a specific draft email.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "draft_id": {
+                    "type": "string",
+                    "description": "ID of the draft to retrieve"
+                },
+                "format": {
+                    "type": "string",
+                    "enum": [
+                        "full",
+                        "metadata",
+                        "minimal"
+                    ],
+                    "default": "full",
+                    "description": "Level of detail to retrieve"
+                }
+            },
+            "required": [
+                "draft_id"
+            ],
+            "additionalProperties": false
+        }
+    },
+    {
+        "name": "damien_delete_draft",
+        "description": "Permanently deletes a draft email.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "draft_id": {
+                    "type": "string",
+                    "description": "ID of the draft to delete"
+                }
+            },
+            "required": [
+                "draft_id"
+            ],
+            "additionalProperties": false
+        }
+    },
+    {
+        "name": "damien_list_threads",
+        "description": "Lists email threads with optional filtering and pagination.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Gmail query string to filter threads (e.g., 'is:unread', 'label:important')"
+                },
+                "max_results": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 500,
+                    "default": 100,
+                    "description": "Maximum number of threads to return"
+                },
+                "page_token": {
+                    "type": "string",
+                    "description": "Token for pagination to get next page of results"
+                }
+            }
+        }
+    },
+    {
+        "name": "damien_get_thread_details",
+        "description": "Get complete details for a specific email thread including all messages.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "thread_id": {
+                    "type": "string",
+                    "description": "Thread ID to retrieve details for"
+                },
+                "format": {
+                    "type": "string",
+                    "enum": [
+                        "full",
+                        "metadata",
+                        "minimal"
+                    ],
+                    "default": "full",
+                    "description": "Detail level: 'full' (complete), 'metadata' (headers only), 'minimal' (IDs only)"
+                }
+            },
+            "required": [
+                "thread_id"
+            ]
+        }
+    },
+    {
+        "name": "damien_modify_thread_labels",
+        "description": "Add or remove labels from an entire email thread.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "thread_id": {
+                    "type": "string",
+                    "description": "Thread ID to modify labels for"
+                },
+                "add_labels": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "List of label names to add to the thread"
+                },
+                "remove_labels": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "List of label names to remove from the thread"
+                }
+            },
+            "required": [
+                "thread_id"
+            ]
+        }
+    },
+    {
+        "name": "damien_trash_thread",
+        "description": "Move an entire email thread to trash (reversible action).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "thread_id": {
+                    "type": "string",
+                    "description": "Thread ID to move to trash"
+                }
+            },
+            "required": [
+                "thread_id"
+            ]
+        }
+    },
+    {
+        "name": "damien_delete_thread_permanently",
+        "description": "Permanently delete an entire email thread (irreversible action).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "thread_id": {
+                    "type": "string",
+                    "description": "Thread ID to permanently delete (irreversible action)"
+                }
+            },
+            "required": [
+                "thread_id"
+            ]
+        }
+    },
+    {
+        "name": "damien_ai_analyze_emails",
+        "description": "Perform comprehensive AI analysis of Gmail emails with pattern detection, business impact analysis, and intelligent insights generation.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days": {
+                    "type": "integer",
+                    "description": "Number of days to analyze (default: 30)",
+                    "default": 30,
+                    "minimum": 1,
+                    "maximum": 365
+                },
+                "max_emails": {
+                    "type": "integer",
+                    "description": "Maximum number of emails to process (default: 500)",
+                    "default": 500,
+                    "minimum": 1,
+                    "maximum": 2000
+                },
+                "min_confidence": {
+                    "type": "number",
+                    "description": "Minimum confidence threshold for patterns (default: 0.7)",
+                    "default": 0.7,
+                    "minimum": 0.1,
+                    "maximum": 1.0
+                },
+                "output_format": {
+                    "type": "string",
+                    "enum": [
+                        "summary",
+                        "detailed",
+                        "json"
+                    ],
+                    "description": "Output format (default: summary)",
+                    "default": "summary"
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Optional Gmail search query to filter emails"
+                },
+                "patterns_only": {
+                    "type": "boolean",
+                    "description": "Return only pattern detection results (default: false)",
+                    "default": false
+                }
+            }
+        }
+    },
+    {
+        "name": "damien_ai_suggest_rules",
+        "description": "Generate intelligent email management rules based on ML pattern analysis with business impact assessment and confidence scoring.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of rule suggestions (default: 5)",
+                    "default": 5,
+                    "minimum": 1,
+                    "maximum": 20
+                },
+                "min_confidence": {
+                    "type": "number",
+                    "description": "Minimum confidence for suggestions (default: 0.8)",
+                    "default": 0.8,
+                    "minimum": 0.5,
+                    "maximum": 1.0
+                },
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Specific categories to analyze (optional)"
+                },
+                "include_business_impact": {
+                    "type": "boolean",
+                    "description": "Include business impact analysis (default: true)",
+                    "default": true
+                },
+                "auto_validate": {
+                    "type": "boolean",
+                    "description": "Automatically validate suggestions (default: true)",
+                    "default": true
+                }
+            }
+        }
+    },
+    {
+        "name": "damien_ai_quick_test",
+        "description": "Quick validation of AI integration and performance with component health checking and system readiness assessment.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sample_size": {
+                    "type": "integer",
+                    "description": "Number of emails for testing (default: 50)",
+                    "default": 50,
+                    "minimum": 5,
+                    "maximum": 200
+                },
+                "days": {
+                    "type": "integer",
+                    "description": "Days of recent emails to test (default: 7)",
+                    "default": 7,
+                    "minimum": 1,
+                    "maximum": 30
+                },
+                "include_performance": {
+                    "type": "boolean",
+                    "description": "Include performance benchmarking (default: true)",
+                    "default": true
+                },
+                "validate_components": {
+                    "type": "boolean",
+                    "description": "Validate component health (default: true)",
+                    "default": true
+                }
+            }
+        }
+    },
+    {
+        "name": "damien_ai_create_rule",
+        "description": "Create email rules using natural language descriptions with GPT-powered intent recognition and validation.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "rule_description": {
+                    "type": "string",
+                    "description": "Natural language description of the rule",
+                    "minLength": 10,
+                    "maxLength": 500
+                },
+                "validate_before_create": {
+                    "type": "boolean",
+                    "description": "Validate rule before creation (default: true)",
+                    "default": true
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "Preview only, don't create (default: false)",
+                    "default": false
+                },
+                "confidence_threshold": {
+                    "type": "number",
+                    "description": "Minimum confidence for creation (default: 0.8)",
+                    "default": 0.8,
+                    "minimum": 0.5,
+                    "maximum": 1.0
+                }
+            },
+            "required": [
+                "rule_description"
+            ]
+        }
+    },
+    {
+        "name": "damien_ai_get_insights",
+        "description": "Get comprehensive email intelligence and insights with trend analysis, efficiency metrics, and predictive modeling.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "insight_type": {
+                    "type": "string",
+                    "enum": [
+                        "trends",
+                        "patterns",
+                        "efficiency",
+                        "summary"
+                    ],
+                    "description": "Type of insights to generate (default: summary)",
+                    "default": "summary"
+                },
+                "time_range": {
+                    "type": "integer",
+                    "description": "Time range in days (default: 30)",
+                    "default": 30,
+                    "minimum": 7,
+                    "maximum": 365
+                },
+                "include_predictions": {
+                    "type": "boolean",
+                    "description": "Include predictive analysis (default: false)",
+                    "default": false
+                },
+                "format": {
+                    "type": "string",
+                    "enum": [
+                        "text",
+                        "json",
+                        "chart_data"
+                    ],
+                    "description": "Output format (default: text)",
+                    "default": "text"
+                }
+            }
+        }
+    },
+    {
+        "name": "damien_ai_optimize_inbox",
+        "description": "AI-powered inbox optimization with multi-strategy algorithms, risk assessment, and rollback capabilities.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "optimization_type": {
+                    "type": "string",
+                    "enum": [
+                        "declutter",
+                        "organize",
+                        "automate",
+                        "all"
+                    ],
+                    "description": "Type of optimization (default: all)",
+                    "default": "all"
+                },
+                "aggressiveness": {
+                    "type": "string",
+                    "enum": [
+                        "conservative",
+                        "moderate",
+                        "aggressive"
+                    ],
+                    "description": "Optimization aggressiveness (default: moderate)",
+                    "default": "moderate"
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "Simulate only, don't execute (default: true)",
+                    "default": true
+                },
+                "max_actions": {
+                    "type": "integer",
+                    "description": "Maximum number of actions (default: 100)",
+                    "default": 100,
+                    "minimum": 1,
+                    "maximum": 500
+                }
+            }
+        }
+    },
+    {
+        "name": "damien_ai_analyze_emails_large_scale",
+        "description": "Comprehensive large-scale email analysis with statistical rigor for 1000+ emails. Overcomes 50-email limitation through batch processing with enterprise-grade confidence scoring.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "target_count": {
+                    "type": "integer",
+                    "description": "Target number of emails to analyze (default: 5000)",
+                    "default": 5000,
+                    "minimum": 1000,
+                    "maximum": 10000
+                },
+                "days": {
+                    "type": "integer",
+                    "description": "Number of days to look back (default: 90)",
+                    "default": 90,
+                    "minimum": 1,
+                    "maximum": 365
+                },
+                "min_confidence": {
+                    "type": "number",
+                    "description": "Minimum confidence threshold (default: 0.85)",
+                    "default": 0.85,
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "use_statistical_validation": {
+                    "type": "boolean",
+                    "description": "Enable statistical validation (default: true)",
+                    "default": true
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Optional additional Gmail query filter"
+                }
+            }
+        }
+    },
+    {
+        "name": "damien_ai_analyze_emails_async",
+        "description": "\ud83d\ude80 LARGE-SCALE BACKGROUND EMAIL ANALYSIS - No more timeouts! Processes 3,000+ emails in background with progress tracking.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365,
+                    "default": 30,
+                    "description": "Number of days to analyze (default: 30)"
+                },
+                "target_count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000,
+                    "default": 1000,
+                    "description": "Target number of emails to analyze (default: 1000)"
+                },
+                "min_confidence": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 0.85,
+                    "description": "Minimum confidence threshold for patterns (default: 0.85)"
+                },
+                "query": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Optional Gmail search query (e.g., 'is:unread')"
+                },
+                "use_statistical_validation": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable statistical validation (default: true)"
+                }
+            }
+        }
+    },
+    {
+        "name": "damien_job_get_status",
+        "description": "\ud83d\udcca Track background job progress with real-time updates",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "job_id": {
+                    "type": "string",
+                    "description": "Job ID to check status for"
+                }
+            },
+            "required": [
+                "job_id"
+            ]
+        }
+    },
+    {
+        "name": "damien_job_get_result",
+        "description": "\ud83c\udfaf Get comprehensive analysis results when job completes",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "job_id": {
+                    "type": "string",
+                    "description": "Job ID to get results for"
+                }
+            },
+            "required": [
+                "job_id"
+            ]
+        }
+    },
+    {
+        "name": "damien_job_cancel",
+        "description": "\u274c Cancel a running background job",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "job_id": {
+                    "type": "string",
+                    "description": "Job ID to cancel"
+                }
+            },
+            "required": [
+                "job_id"
+            ]
+        }
+    },
+    {
+        "name": "damien_job_list",
+        "description": "\ud83d\udccb List all active background jobs",
+        "input_schema": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "damien_list_emails",
+        "description": "\u26a1 OPTIMIZATION REQUIRED: Lists email messages with support for pagination. ALWAYS use 'include_headers' parameter to fetch all needed data in ONE call instead of making multiple get_email_details calls. This saves 10x time and tokens. Example: include_headers=[\"From\", \"Subject\", \"Date\", \"To\", \"List-Unsubscribe\"]",
+        "input_schema": {
+            "additionalProperties": true,
+            "description": "Parameters for listing draft emails.",
+            "properties": {
+                "query": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "description": "Optional Gmail search query to filter drafts (e.g., 'subject:urgent')",
+                    "title": "Query"
+                },
+                "max_results": {
+                    "anyOf": [
+                        {
+                            "maximum": 100,
+                            "minimum": 1,
+                            "type": "integer"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": 10,
+                    "description": "Maximum number of drafts to return (1-100)",
+                    "title": "Max Results"
+                },
+                "page_token": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "description": "Token for fetching next page of results",
+                    "title": "Page Token"
+                },
+                "include_headers": {
+                    "anyOf": [
+                        {
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": "array"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "description": "Optional list of header names to include in the response. Can be a JSON string list.",
+                    "title": "Include Headers"
+                }
+            },
+            "title": "ListDraftsParams",
+            "type": "object"
+        },
+        "output_schema": {
+            "description": "Output for listing drafts. (Placeholder)",
+            "properties": {
+                "email_summaries": {
+                    "default": [],
+                    "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                    },
+                    "title": "Email Summaries",
+                    "type": "array"
+                },
+                "next_page_token": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Next Page Token"
+                }
+            },
+            "title": "ListEmailsOutput",
+            "type": "object"
+        }
+    },
+    {
+        "name": "damien_get_email_details",
+        "description": "Retrieves the full details of a specific email message, including headers, payload (body, parts), and raw content based on the specified format.",
+        "input_schema": {
+            "additionalProperties": true,
+            "description": "Parameters for getting draft details.",
+            "properties": {
+                "message_id": {
+                    "description": "The unique ID of the draft/message to retrieve",
+                    "title": "Message Id",
+                    "type": "string"
+                },
+                "format": {
+                    "anyOf": [
+                        {
+                            "pattern": "^(full|metadata|minimal)$",
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": "full",
+                    "description": "Level of detail to retrieve (full, metadata, minimal)",
+                    "title": "Format"
+                },
+                "include_headers": {
+                    "anyOf": [
+                        {
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": "array"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "description": "Optional list of header names to include in the response. Can be a JSON string list.",
+                    "title": "Include Headers"
+                }
+            },
+            "required": [
+                "message_id"
+            ],
+            "title": "GetDraftDetailsParams",
+            "type": "object"
+        },
+        "output_schema": {
+            "description": "Output for getting draft details. (Placeholder)",
+            "properties": {
+                "id": {
+                    "title": "Id",
+                    "type": "string"
+                },
+                "thread_id": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Thread Id"
+                },
+                "subject": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Subject"
+                }
+            },
+            "required": [
+                "id"
+            ],
+            "title": "GetEmailDetailsOutput",
+            "type": "object"
+        }
+    },
+    {
+        "name": "damien_trash_emails",
+        "description": "Moves specified emails to the trash folder. Returns a count of trashed emails and a status message.",
+        "input_schema": {
+            "additionalProperties": true,
+            "description": "Parameters for trashing emails. (Placeholder)",
+            "properties": {
+                "message_ids": {
+                    "description": "List of message IDs to trash.",
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Message Ids",
+                    "type": "array"
+                }
+            },
+            "required": [
+                "message_ids"
+            ],
+            "title": "TrashEmailsParams",
+            "type": "object"
+        },
+        "output_schema": {
+            "description": "Output for trashing emails. (Placeholder)",
+            "properties": {
+                "trashed_count": {
+                    "default": 0,
+                    "title": "Trashed Count",
+                    "type": "integer"
+                },
+                "status_message": {
+                    "default": "",
+                    "title": "Status Message",
+                    "type": "string"
+                }
+            },
+            "title": "TrashEmailsOutput",
+            "type": "object"
+        }
+    },
+    {
+        "name": "damien_label_emails",
+        "description": "Adds or removes specified labels from emails. Returns a count of modified emails and a status message.",
+        "input_schema": {
+            "additionalProperties": true,
+            "description": "Parameters for labeling emails. (Placeholder)",
+            "properties": {
+                "message_ids": {
+                    "description": "List of message IDs to label.",
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Message Ids",
+                    "type": "array"
+                },
+                "add_label_names": {
+                    "anyOf": [
+                        {
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": "array"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "description": "Labels to add.",
+                    "title": "Add Label Names"
+                },
+                "remove_label_names": {
+                    "anyOf": [
+                        {
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": "array"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "description": "Labels to remove.",
+                    "title": "Remove Label Names"
+                }
+            },
+            "required": [
+                "message_ids"
+            ],
+            "title": "LabelEmailsParams",
+            "type": "object"
+        },
+        "output_schema": {
+            "description": "Output for labeling emails. (Placeholder)",
+            "properties": {
+                "modified_count": {
+                    "default": 0,
+                    "title": "Modified Count",
+                    "type": "integer"
+                },
+                "status_message": {
+                    "default": "",
+                    "title": "Status Message",
+                    "type": "string"
+                }
+            },
+            "title": "LabelEmailsOutput",
+            "type": "object"
+        }
+    },
+    {
+        "name": "damien_mark_emails",
+        "description": "Marks specified emails as read or unread. Returns a count of modified emails and a status message.",
+        "input_schema": {
+            "additionalProperties": true,
+            "description": "Parameters for marking emails. (Placeholder)",
+            "properties": {
+                "message_ids": {
+                    "description": "List of message IDs to mark.",
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Message Ids",
+                    "type": "array"
+                },
+                "mark_as": {
+                    "description": "Mark as 'read' or 'unread'.",
+                    "enum": [
+                        "read",
+                        "unread"
+                    ],
+                    "title": "Mark As",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "message_ids",
+                "mark_as"
+            ],
+            "title": "MarkEmailsParams",
+            "type": "object"
+        },
+        "output_schema": {
+            "description": "Output for marking emails. (Placeholder)",
+            "properties": {
+                "modified_count": {
+                    "default": 0,
+                    "title": "Modified Count",
+                    "type": "integer"
+                },
+                "status_message": {
+                    "default": "",
+                    "title": "Status Message",
+                    "type": "string"
+                }
+            },
+            "title": "MarkEmailsOutput",
+            "type": "object"
+        }
+    },
+    {
+        "name": "damien_apply_rules",
+        "description": "Applies filtering rules to emails in your Gmail account based on various criteria. Can be run in dry-run mode. Returns a detailed summary of actions taken or that would be taken.",
+        "input_schema": {
+            "additionalProperties": true,
+            "description": "Parameters for applying rules. (Placeholder)",
+            "properties": {
+                "rule_ids_to_apply": {
+                    "anyOf": [
+                        {
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": "array"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "description": "List of rule IDs to apply.",
+                    "title": "Rule Ids To Apply"
+                },
+                "gmail_query_filter": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Gmail Query Filter"
+                },
+                "dry_run": {
+                    "default": false,
+                    "title": "Dry Run",
+                    "type": "boolean"
+                },
+                "scan_limit": {
+                    "anyOf": [
+                        {
+                            "type": "integer"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Scan Limit"
+                },
+                "date_after": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Date After"
+                },
+                "date_before": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Date Before"
+                },
+                "all_mail": {
+                    "default": false,
+                    "title": "All Mail",
+                    "type": "boolean"
+                },
+                "include_detailed_ids": {
+                    "default": false,
+                    "title": "Include Detailed Ids",
+                    "type": "boolean"
+                }
+            },
+            "title": "ApplyRulesParams",
+            "type": "object"
+        },
+        "output_schema": {
+            "description": "Output for applying rules. (Placeholder)",
+            "properties": {
+                "summary": {
+                    "additionalProperties": true,
+                    "default": {},
+                    "title": "Summary",
+                    "type": "object"
+                }
+            },
+            "title": "ApplyRulesOutput",
+            "type": "object"
+        }
+    },
+    {
+        "name": "damien_list_rules",
+        "description": "Lists filtering rules in Damien. Can return summaries or full definitions.",
+        "input_schema": {
+            "additionalProperties": true,
+            "description": "Parameters for listing rules. (Placeholder)",
+            "properties": {
+                "summary_view": {
+                    "default": true,
+                    "description": "Return summary view or full details.",
+                    "title": "Summary View",
+                    "type": "boolean"
+                }
+            },
+            "title": "ListRulesParams",
+            "type": "object"
+        },
+        "output_schema": {
+            "description": "Output for listing rules. (Placeholder)",
+            "properties": {
+                "rules": {
+                    "default": [],
+                    "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                    },
+                    "title": "Rules",
+                    "type": "array"
+                }
+            },
+            "title": "ListRulesOutput",
+            "type": "object"
+        }
+    },
+    {
+        "name": "damien_get_rule_details",
+        "description": "Retrieves the full definition of a specific filtering rule by its ID or name.",
+        "input_schema": {
+            "additionalProperties": true,
+            "description": "Parameters for getting rule details. (Placeholder)",
+            "properties": {
+                "rule_id_or_name": {
+                    "description": "ID or name of the rule.",
+                    "title": "Rule Id Or Name",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "rule_id_or_name"
+            ],
+            "title": "GetRuleDetailsParams",
+            "type": "object"
+        },
+        "output_schema": {
+            "description": "Output for rule details - typically the full rule model. (Placeholder)",
+            "properties": {
+                "id": {
+                    "title": "Id",
+                    "type": "string"
+                },
+                "name": {
+                    "title": "Name",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "id",
+                "name"
+            ],
+            "title": "RuleModelOutput",
+            "type": "object"
+        }
+    },
+    {
+        "name": "damien_add_rule",
+        "description": "Adds a new filtering rule to Damien. Expects a full rule definition and returns the created rule, including its server-generated ID and timestamps.",
+        "input_schema": {
+            "$defs": {
+                "RuleDefinitionModel": {
+                    "properties": {
+                        "name": {
+                            "title": "Name",
+                            "type": "string"
+                        },
+                        "description": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "default": null,
+                            "title": "Description"
+                        },
+                        "is_enabled": {
+                            "default": true,
+                            "title": "Is Enabled",
+                            "type": "boolean"
+                        },
+                        "conditions": {
+                            "items": {
+                                "additionalProperties": true,
+                                "type": "object"
+                            },
+                            "title": "Conditions",
+                            "type": "array"
+                        },
+                        "condition_conjunction": {
+                            "default": "AND",
+                            "enum": [
+                                "AND",
+                                "OR"
+                            ],
+                            "title": "Condition Conjunction",
+                            "type": "string"
+                        },
+                        "actions": {
+                            "items": {
+                                "additionalProperties": true,
+                                "type": "object"
+                            },
+                            "title": "Actions",
+                            "type": "array"
+                        }
+                    },
+                    "required": [
+                        "name",
+                        "conditions",
+                        "actions"
+                    ],
+                    "title": "RuleDefinitionModel",
+                    "type": "object"
+                }
+            },
+            "additionalProperties": true,
+            "description": "Parameters for adding a rule. (Placeholder)",
+            "properties": {
+                "rule_definition": {
+                    "$ref": "#/$defs/RuleDefinitionModel"
+                }
+            },
+            "required": [
+                "rule_definition"
+            ],
+            "title": "AddRuleParams",
+            "type": "object"
+        },
+        "output_schema": {
+            "description": "Output for adding a rule. (Placeholder)",
+            "properties": {
+                "id": {
+                    "title": "Id",
+                    "type": "string"
+                },
+                "name": {
+                    "title": "Name",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "id",
+                "name"
+            ],
+            "title": "AddRuleOutput",
+            "type": "object"
+        }
+    },
+    {
+        "name": "damien_delete_rule",
+        "description": "Deletes a filtering rule from Damien by its ID or name. Returns a status message and the identifier of the deleted rule.",
+        "input_schema": {
+            "additionalProperties": true,
+            "description": "Parameters for deleting a rule. (Placeholder)",
+            "properties": {
+                "rule_identifier": {
+                    "description": "ID or name of the rule to delete.",
+                    "title": "Rule Identifier",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "rule_identifier"
+            ],
+            "title": "DeleteRuleParams",
+            "type": "object"
+        },
+        "output_schema": {
+            "description": "Output for deleting a rule. (Placeholder)",
+            "properties": {
+                "status_message": {
+                    "default": "",
+                    "title": "Status Message",
+                    "type": "string"
+                },
+                "deleted_rule_identifier": {
+                    "title": "Deleted Rule Identifier",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "deleted_rule_identifier"
+            ],
+            "title": "DeleteRuleOutput",
+            "type": "object"
+        }
+    },
+    {
+        "name": "damien_delete_emails_permanently",
+        "description": "PERMANENTLY deletes specified emails from Gmail. This action is irreversible and emails cannot be recovered. Returns a count of deleted emails and a status message.",
+        "input_schema": {
+            "additionalProperties": true,
+            "description": "Parameters for permanently deleting emails. (Placeholder)",
+            "properties": {
+                "message_ids": {
+                    "description": "List of message IDs to permanently delete.",
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Message Ids",
+                    "type": "array"
+                }
+            },
+            "required": [
+                "message_ids"
+            ],
+            "title": "DeleteEmailsPermanentlyParams",
+            "type": "object"
+        },
+        "output_schema": {
+            "description": "Output for permanently deleting emails. (Placeholder)",
+            "properties": {
+                "deleted_count": {
+                    "default": 0,
+                    "title": "Deleted Count",
+                    "type": "integer"
+                },
+                "status_message": {
+                    "default": "",
+                    "title": "Status Message",
+                    "type": "string"
+                }
+            },
+            "title": "DeleteEmailsPermanentlyOutput",
+            "type": "object"
+        }
+    }
+]

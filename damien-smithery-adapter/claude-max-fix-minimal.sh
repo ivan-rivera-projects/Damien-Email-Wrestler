@@ -1,6 +1,6 @@
-#\!/bin/bash
-# Enhanced Claude MAX compatibility wrapper for Damien Email Wrestler
-# This wrapper ensures proper handling of Claude MAX's enhanced tool processing
+#!/bin/bash
+# Enhanced Claude MAX compatibility wrapper for Damien Minimal MCP Server
+# This wrapper ensures proper handling of Claude MAX's enhanced tool processing with the minimal MCP server
 
 # Enhanced logging function
 log() {
@@ -13,7 +13,6 @@ mkdir -p "$LOGS_DIR"
 
 # Set strict environment variables with fixed naming for Claude MAX  
 export DAMIEN_MCP_SERVER_URL="http://localhost:8893"
-export DAMIEN_BACKEND_URL="http://localhost:8892"
 export DAMIEN_MCP_SERVER_API_KEY="7e508adf3ccf8b9376c312df8cebd488f3988f310afbdf5077d5d3ce63ed7c8f"
 export SERVER_NAME="Damien_Email_Wrestler" # Underscores instead of spaces
 export SERVER_VERSION="2.0.0"
