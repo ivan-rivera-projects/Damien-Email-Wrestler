@@ -44,8 +44,21 @@ class DamienMcpServer {
     };
 
     process.on('SIGINT', async () => {
+      console.error('Received SIGINT, shutting down gracefully...');
       await this.server.close();
       process.exit(0);
+    });
+
+    process.on('uncaughtException', (error) => {
+      console.error('Uncaught Exception:', error);
+      // Don't exit immediately for Claude MAX compatibility
+      setTimeout(() => process.exit(1), 1000);
+    });
+
+    process.on('unhandledRejection', (reason) => {
+      console.error('Unhandled Rejection:', reason);
+      // Don't exit immediately for Claude MAX compatibility
+      setTimeout(() => process.exit(1), 1000);
     });
   }
 
@@ -53,10 +66,16 @@ class DamienMcpServer {
     // List tools handler
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       try {
-        // Try to get tools from Damien MCP Server, fallback to static definitions
+        // Try to get tools from Damien MCP Server with a timeout for Claude MAX
         if (this.toolDefinitions.length === 0) {
           try {
-            this.toolDefinitions = await getDamienToolDefinitions();
+            // Add timeout to prevent hanging
+            const toolsPromise = getDamienToolDefinitions();
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Tool loading timeout')), 5000)
+            );
+            
+            this.toolDefinitions = await Promise.race([toolsPromise, timeoutPromise]) as any[];
             console.error(`Loaded ${this.toolDefinitions.length} tools from Damien MCP Server`);
           } catch (error) {
             console.error('Failed to load tools from Damien MCP Server, using static definitions:', error);
@@ -64,16 +83,24 @@ class DamienMcpServer {
           }
         }
 
-        return {
-          tools: this.toolDefinitions.map(tool => ({
-            name: tool.name,
-            description: tool.description,
-            inputSchema: tool.inputSchema,
-          })),
-        };
+        // Ensure we always return valid tool definitions
+        const tools = this.toolDefinitions.map(tool => ({
+          name: tool.name,
+          description: tool.description || 'No description available',
+          inputSchema: tool.inputSchema || { type: 'object', properties: {} },
+        }));
+
+        return { tools };
       } catch (error) {
         console.error('Error in list tools handler:', error);
-        throw new McpError(ErrorCode.InternalError, 'Failed to list tools');
+        // Return static tools as fallback to prevent Claude MAX from erroring
+        return {
+          tools: staticToolDefinitions.map(tool => ({
+            name: tool.name,
+            description: tool.description || 'No description available',
+            inputSchema: tool.inputSchema || { type: 'object', properties: {} },
+          })),
+        };
       }
     });
 
@@ -89,18 +116,25 @@ class DamienMcpServer {
         const result = await this.damienClient.executeTool(name, args, 'claude_session') as any;
         
         if (result.is_error) {
-          throw new McpError(
-            ErrorCode.InternalError, 
-            result.error_message || `Tool execution failed: ${name}`
-          );
+          // Return error in MCP format that Claude MAX expects
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error: ${result.error_message || `Tool execution failed: ${name}`}`,
+              },
+            ],
+            isError: true,
+          };
         }
 
-        // Format the result for MCP
+        // Format the result for MCP - handle Claude MAX's stricter format requirements
         let content: string;
         if (result.output !== undefined && result.output !== null) {
           if (typeof result.output === 'string') {
             content = result.output;
           } else {
+            // Claude MAX may have issues with deeply nested objects, so we stringify with formatting
             content = JSON.stringify(result.output, null, 2);
           }
         } else {
@@ -114,18 +148,21 @@ class DamienMcpServer {
               text: content,
             },
           ],
+          isError: false,
         };
       } catch (error) {
         console.error(`Error executing tool ${name}:`, error);
         
-        if (error instanceof McpError) {
-          throw error;
-        }
-        
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Failed to execute tool ${name}: ${error instanceof Error ? error.message : 'Unknown error'}`
-        );
+        // Return error in a format Claude MAX can handle
+        return {
+          content: [
+            {
+              type: "text", 
+              text: `Failed to execute tool ${name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            },
+          ],
+          isError: true,
+        };
       }
     });
 

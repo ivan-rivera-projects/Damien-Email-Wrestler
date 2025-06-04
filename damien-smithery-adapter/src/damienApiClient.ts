@@ -19,24 +19,35 @@ export class DamienApiClient {
   async executeTool(toolName: string, params: any, sessionId: string) {
     const url = `${this.baseUrl}/mcp/execute_tool`;
     
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': this.apiKey
-      },
-      body: JSON.stringify({
-        tool_name: toolName,
-        input: params,
-        session_id: sessionId
-      })
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Damien MCP Server error: ${response.status} ${response.statusText}`);
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': this.apiKey
+        },
+        body: JSON.stringify({
+          tool_name: toolName,
+          input: params,
+          session_id: sessionId
+        }),
+        // Add timeout for Claude MAX compatibility
+        signal: AbortSignal.timeout(30000) // 30 second timeout
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'No error details');
+        throw new Error(`Damien MCP Server error: ${response.status} ${response.statusText} - ${errorText}`);
+      }
+      
+      return await response.json();
+    } catch (error: any) {
+      // Handle timeout and other network errors gracefully
+      if (error?.name === 'AbortError') {
+        throw new Error(`Tool execution timeout for ${toolName}`);
+      }
+      throw error;
     }
-    
-    return await response.json();
   }
   
   /**

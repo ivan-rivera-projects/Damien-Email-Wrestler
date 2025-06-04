@@ -29,33 +29,58 @@ class EmailPatternDetector:
         
         try:
             # 1. Sender-based patterns (most reliable)
-            sender_patterns = self._detect_sender_patterns(emails)
-            patterns.extend(sender_patterns)
+            try:
+                sender_patterns = self._detect_sender_patterns(emails)
+                patterns.extend(sender_patterns)
+                logger.debug(f"Detected {len(sender_patterns)} sender patterns")
+            except Exception as e:
+                logger.warning(f"Error in sender pattern detection: {str(e)}")
             
             # 2. Subject line patterns  
-            subject_patterns = self._detect_subject_patterns(emails)
-            patterns.extend(subject_patterns)
+            try:
+                subject_patterns = self._detect_subject_patterns(emails)
+                patterns.extend(subject_patterns)
+                logger.debug(f"Detected {len(subject_patterns)} subject patterns")
+            except Exception as e:
+                logger.warning(f"Error in subject pattern detection: {str(e)}")
             
             # 3. Label patterns
-            label_patterns = self._detect_label_patterns(emails)
-            patterns.extend(label_patterns)
+            try:
+                label_patterns = self._detect_label_patterns(emails)
+                patterns.extend(label_patterns)
+                logger.debug(f"Detected {len(label_patterns)} label patterns")
+            except Exception as e:
+                logger.warning(f"Error in label pattern detection: {str(e)}")
             
             # 4. Time-based patterns (basic)
-            time_patterns = self._detect_time_patterns(emails)
-            patterns.extend(time_patterns)
+            try:
+                time_patterns = self._detect_time_patterns(emails)
+                patterns.extend(time_patterns)
+                logger.debug(f"Detected {len(time_patterns)} time patterns")
+            except Exception as e:
+                logger.warning(f"Error in time pattern detection: {str(e)}")
             
             # 5. Size/attachment patterns
-            attachment_patterns = self._detect_attachment_patterns(emails)
-            patterns.extend(attachment_patterns)
+            try:
+                attachment_patterns = self._detect_attachment_patterns(emails)
+                patterns.extend(attachment_patterns)
+                logger.debug(f"Detected {len(attachment_patterns)} attachment patterns")
+            except Exception as e:
+                logger.warning(f"Error in attachment pattern detection: {str(e)}")
             
             # Filter by confidence and remove duplicates
-            patterns = self._filter_and_dedupe_patterns(patterns)
+            try:
+                patterns = self._filter_and_dedupe_patterns(patterns)
+            except Exception as e:
+                logger.warning(f"Error in pattern filtering: {str(e)}")
+                # Return unfiltered patterns if filtering fails
+                pass
             
             logger.info(f"Detected {len(patterns)} email patterns")
             return patterns
             
         except Exception as e:
-            logger.error(f"Error detecting patterns: {str(e)}")
+            logger.error(f"Error detecting patterns: {str(e)}", exc_info=True)
             return []
     
     def _detect_sender_patterns(self, emails: List[Dict]) -> List[EmailPattern]:
@@ -96,31 +121,44 @@ class EmailPatternDetector:
             # Determine sender type and confidence
             sender_type, confidence = self._classify_sender(sender, subjects)
             
-            # Create pattern characteristics
-            characteristics = PatternCharacteristics(
-                primary_feature=sender,
-                secondary_features=common_subject_words[:3],
-                statistical_measures={
-                    'email_count': email_count,
-                    'attachment_rate': attachment_rate,
-                    'prevalence': email_count / total_emails
-                },
-                sender_domain=sender.split('@')[-1] if '@' in sender else sender,
-                sender_type=sender_type,
-                common_keywords=common_subject_words
-            )
+            # Create pattern characteristics with minimal complexity to avoid recursion
+            try:
+                characteristics = PatternCharacteristics(
+                    primary_feature=sender,
+                    secondary_features=common_subject_words[:3],
+                    statistical_measures={
+                        'email_count': email_count,
+                        'attachment_rate': attachment_rate,
+                        'prevalence': email_count / total_emails
+                    },
+                    sender_domain=sender.split('@')[-1] if '@' in sender else sender,
+                    sender_type=sender_type,
+                    common_keywords=common_subject_words
+                )
+            except Exception as char_error:
+                logger.warning(f"Error creating characteristics for {sender}: {char_error}")
+                # Create minimal characteristics if complex creation fails
+                characteristics = PatternCharacteristics(
+                    primary_feature=sender,
+                    statistical_measures={'email_count': email_count}
+                )
             
-            return EmailPattern(
-                pattern_type=PatternType.SENDER,
-                pattern_name=f"High Volume Sender: {sender}",
-                description=f"{sender_type} sender with {email_count} emails",
-                email_count=email_count,
-                total_email_universe=total_emails,
-                prevalence_rate=email_count / total_emails,
-                confidence=confidence,
-                characteristics=characteristics,
-                example_email_ids=[email['id'] for email in emails[:3] if 'id' in email]
-            )
+            # Create EmailPattern with error handling
+            try:
+                return EmailPattern(
+                    pattern_type=PatternType.SENDER,
+                    pattern_name=f"High Volume Sender: {sender}",
+                    description=f"{sender_type} sender with {email_count} emails",
+                    email_count=email_count,
+                    total_email_universe=total_emails,
+                    prevalence_rate=email_count / total_emails,
+                    confidence=confidence,
+                    characteristics=characteristics,
+                    example_email_ids=[email.get('id', '') for email in emails[:3] if email.get('id')]
+                )
+            except Exception as pattern_error:
+                logger.warning(f"Error creating EmailPattern for {sender}: {pattern_error}")
+                return None
             
         except Exception as e:
             logger.warning(f"Error analyzing sender {sender}: {str(e)}")

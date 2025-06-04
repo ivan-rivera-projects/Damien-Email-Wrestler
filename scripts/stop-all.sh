@@ -51,7 +51,7 @@ stop_service_on_port 8081 "Smithery Adapter"
 # Also look for any npm processes related to our services
 echo ""
 echo "Checking for any remaining Damien processes..."
-remaining=$(ps aux | grep -E "(damien-mcp-server|damien-smithery-adapter)" | grep -v grep | grep -v stop-all.sh)
+remaining=$(ps aux | grep -E "(damien-mcp-server|damien-smithery-adapter|stdioServer)" | grep -v grep | grep -v stop-all.sh)
 
 if [ -n "$remaining" ]; then
     echo -e "${YELLOW}Found remaining processes:${NC}"
@@ -65,6 +65,23 @@ if [ -n "$remaining" ]; then
     fi
 else
     echo -e "${GREEN}✓ No remaining Damien processes found${NC}"
+fi
+
+# Clean up any hanging Claude MCP connections
+echo ""
+echo "Checking for Claude MCP connections..."
+claude_processes=$(ps aux | grep -E "(claude.*mcp|stdioServer)" | grep -v grep | grep -v stop-all.sh || true)
+if [ -n "$claude_processes" ]; then
+    echo -e "${YELLOW}Found Claude MCP processes:${NC}"
+    echo "$claude_processes"
+    echo "$claude_processes" | awk '{print $2}' | xargs kill -TERM 2>/dev/null || true
+    sleep 2
+    # Force kill if still running
+    claude_processes=$(ps aux | grep -E "(claude.*mcp|stdioServer)" | grep -v grep | grep -v stop-all.sh || true)
+    if [ -n "$claude_processes" ]; then
+        echo "$claude_processes" | awk '{print $2}' | xargs kill -9 2>/dev/null || true
+    fi
+    echo -e "${GREEN}✓ Claude MCP processes cleaned up${NC}"
 fi
 
 echo ""

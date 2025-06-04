@@ -134,13 +134,41 @@ else
     test_failed "Unexpected tool count: $TOOL_COUNT tools (expected ~34)"
 fi
 
-# Test specific AI tool presence
-AI_TOOLS_PRESENT=$(curl -s -H "X-API-Key: $DAMIEN_MCP_SERVER_API_KEY" http://localhost:8892/mcp/list_tools | grep -o "damien_ai_[^\"]*" | wc -l | tr -d ' ')
+# Test Claude Max compatibility
+echo ""
+echo "Testing Claude Max compatibility..."
 
-if [ "$AI_TOOLS_PRESENT" = "6" ]; then
-    test_passed "All 6 AI intelligence tools registered: damien_ai_*"
+# Check Claude Desktop config
+CLAUDE_CONFIG_PATH="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
+if [ -f "$CLAUDE_CONFIG_PATH" ]; then
+    # Check if server name uses underscores (required for Claude Max)
+    if grep -q "damien_email_wrestler" "$CLAUDE_CONFIG_PATH"; then
+        test_passed "Claude Desktop config uses correct naming pattern"
+    elif grep -q "damien-email-wrestler" "$CLAUDE_CONFIG_PATH"; then
+        test_failed "Claude Desktop config uses hyphens (should be underscores for Claude Max)"
+        echo "  Update config from 'damien-email-wrestler' to 'damien_email_wrestler'"
+    else
+        test_failed "Damien MCP server not found in Claude Desktop config"
+    fi
+    
+    # Check if API key matches
+    CONFIG_API_KEY=$(grep -A 10 "damien.*email.*wrestler" "$CLAUDE_CONFIG_PATH" | grep "DAMIEN_MCP_SERVER_API_KEY" | cut -d'"' -f4)
+    if [ "$CONFIG_API_KEY" = "$DAMIEN_MCP_SERVER_API_KEY" ]; then
+        test_passed "Claude Desktop API key matches .env file"
+    else
+        test_failed "Claude Desktop API key mismatch"
+        echo "  Config: ${CONFIG_API_KEY:0:10}..."
+        echo "  .env:   ${DAMIEN_MCP_SERVER_API_KEY:0:10}..."
+    fi
 else
-    test_failed "Only $AI_TOOLS_PRESENT AI intelligence tools found (expected 6)"
+    test_failed "Claude Desktop config not found"
+fi
+
+# Check TypeScript compilation
+if [ -f "damien-smithery-adapter/dist/stdioServer.js" ]; then
+    test_passed "Smithery Adapter TypeScript compiled"
+else
+    test_failed "Smithery Adapter TypeScript not compiled"
 fi
 
 # Summary

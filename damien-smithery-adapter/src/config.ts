@@ -4,7 +4,7 @@ dotenv.config(); // Loads .env file into process.env
 
 export const CONFIG = {
   DAMIEN_MCP_SERVER_URL: process.env.DAMIEN_MCP_SERVER_URL || 'http://localhost:8892',
-  DAMIEN_MCP_SERVER_API_KEY: '7a508adf3ccf8b9376c312df8cebd488f3988f310afbdf5077d5d3ce63ed7c8f', // Hardcoded for debugging
+  DAMIEN_MCP_SERVER_API_KEY: process.env.DAMIEN_MCP_SERVER_API_KEY || '7e508adf3ccf8b9376c312df8cebd488f3988f310afbdf5077d5d3ce63ed7c8f', // Use env var first, fallback to correct key
   
   SERVER_PORT: parseInt(process.env.SERVER_PORT || '8081', 10), // Port for THIS Smithery adapter server
   SERVER_NAME: process.env.SERVER_NAME || 'Damien Email Manager via Smithery',

@@ -54,3 +54,54 @@ else
 fi
 
 echo "🎉 Environment variable synchronization complete!"
+
+# Update Claude Desktop configuration with correct API key and naming
+CLAUDE_CONFIG_PATH="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
+
+echo ""
+echo "🖥️  Checking Claude Desktop configuration..."
+
+if [ -f "$CLAUDE_CONFIG_PATH" ]; then
+    # Check if Damien server is configured
+    if grep -q "damien.*email.*wrestler" "$CLAUDE_CONFIG_PATH"; then
+        echo "✅ Damien MCP server found in Claude Desktop config"
+        
+        # Check if using correct naming pattern (underscores vs hyphens)
+        if grep -q '"damien-email-wrestler"' "$CLAUDE_CONFIG_PATH"; then
+            echo "⚠️  Found hyphenated server name (damien-email-wrestler)"
+            echo "🔧 Claude Max requires underscore naming (damien_email_wrestler)"
+            echo ""
+            echo "To fix this manually, update your Claude Desktop config:"
+            echo "   1. Open Claude Desktop"
+            echo "   2. Go to Settings > Developer"
+            echo "   3. Edit Config"
+            echo "   4. Change 'damien-email-wrestler' to 'damien_email_wrestler'"
+            echo ""
+        elif grep -q '"damien_email_wrestler"' "$CLAUDE_CONFIG_PATH"; then
+            echo "✅ Using correct naming pattern for Claude Max"
+        fi
+        
+        # Check API key sync
+        CONFIG_API_KEY=$(grep -A 10 "damien.*email.*wrestler" "$CLAUDE_CONFIG_PATH" | grep "DAMIEN_MCP_SERVER_API_KEY" | cut -d'"' -f4)
+        if [ "$CONFIG_API_KEY" = "$API_KEY" ]; then
+            echo "✅ Claude Desktop API key is synchronized"
+        else
+            echo "⚠️  API key mismatch detected:"
+            echo "   Config: ${CONFIG_API_KEY:0:10}..."
+            echo "   .env:   ${API_KEY:0:10}..."
+            echo "   Please update Claude Desktop config manually"
+        fi
+    else
+        echo "⚠️  Damien MCP server not found in Claude Desktop config"
+        echo "Please add it manually through Claude Desktop settings"
+    fi
+else
+    echo "⚠️  Claude Desktop config file not found"
+    echo "Expected location: $CLAUDE_CONFIG_PATH"
+fi
+
+echo ""
+echo "🎯 Next steps:"
+echo "   1. Restart Claude Desktop to reload configuration"
+echo "   2. Run ./scripts/test.sh to validate setup"
+echo "   3. Check Claude Desktop for MCP tool availability"

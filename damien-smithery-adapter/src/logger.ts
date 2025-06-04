@@ -18,6 +18,3 @@ if (CONFIG.LOG_FILE_PATH) {
 }
 
 export default logger;
-
-
-export default logger;

@@ -94,5 +94,3 @@ async function startServer(): Promise<void> {
 }
 
 export { startServer };
-
-export { startServer };

@@ -18,6 +18,19 @@ NC='\033[0m' # No Color
 echo "Synchronizing environment variables..."
 ./scripts/sync-env.sh
 
+# Ensure TypeScript compilation is up to date for Smithery Adapter
+echo "Checking TypeScript compilation for Smithery Adapter..."
+cd damien-smithery-adapter
+if [ ! -f "dist/stdioServer.js" ] || [ "src/stdioServer.ts" -nt "dist/stdioServer.js" ]; then
+    echo "Building TypeScript components..."
+    npm run build
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}❌ TypeScript build failed${NC}"
+        exit 1
+    fi
+fi
+cd ..
+
 # Function to check if a port is in use
 check_port() {
     local port=$1
