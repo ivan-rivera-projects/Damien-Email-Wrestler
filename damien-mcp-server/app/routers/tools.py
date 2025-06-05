@@ -81,7 +81,9 @@ from ..models.tools import (
     GetRuleDetailsParams, # New tool
     AddRuleParams, AddRuleOutput,
     DeleteRuleParams, DeleteRuleOutput,
-    DeleteEmailsPermanentlyParams, DeleteEmailsPermanentlyOutput
+    DeleteEmailsPermanentlyParams, DeleteEmailsPermanentlyOutput,
+    # Label management models
+    ListLabelsParams, ListLabelsOutput
 )
 
 # Set up logger
@@ -290,6 +292,42 @@ async def execute_tool_endpoint(
                 )
                 if api_response.get("success"): tool_output_data = api_response.get("data")
                 else: is_error_flag = True; error_message = api_response.get("error_message", "Unknown error from damien_mark_emails tool.")
+        
+        elif tool_name == "damien_list_labels":
+            try:
+                list_labels_params = ListLabelsParams(**params_dict)
+            except ValidationError as e:
+                is_error_flag = True; error_message = f"Invalid parameters for {tool_name}: {e.errors()}"
+            if not is_error_flag:
+                api_response = await adapter.list_labels_tool()
+                if api_response.get("success"): tool_output_data = api_response.get("data")
+                else: is_error_flag = True; error_message = api_response.get("error_message", "Unknown error from damien_list_labels tool.")
+
+        elif tool_name == "damien_count_emails_by_label":
+            try:
+                label_name = params_dict.get("label_name")
+                max_count = params_dict.get("max_count", 10000)
+                if not label_name:
+                    is_error_flag = True; error_message = "Missing required parameter: label_name"
+            except Exception as e:
+                is_error_flag = True; error_message = f"Invalid parameters for {tool_name}: {e}"
+            if not is_error_flag:
+                api_response = await adapter.count_emails_by_label_tool(label_name=label_name, max_count=max_count)
+                if api_response.get("success"): tool_output_data = api_response.get("data")
+                else: is_error_flag = True; error_message = api_response.get("error_message", "Unknown error from damien_count_emails_by_label tool.")
+
+        elif tool_name == "damien_get_all_emails_by_label":
+            try:
+                label_name = params_dict.get("label_name")
+                max_emails = params_dict.get("max_emails", 5000)
+                if not label_name:
+                    is_error_flag = True; error_message = "Missing required parameter: label_name"
+            except Exception as e:
+                is_error_flag = True; error_message = f"Invalid parameters for {tool_name}: {e}"
+            if not is_error_flag:
+                api_response = await adapter.get_all_emails_by_label_tool(label_name=label_name, max_emails=max_emails)
+                if api_response.get("success"): tool_output_data = api_response.get("data")
+                else: is_error_flag = True; error_message = api_response.get("error_message", "Unknown error from damien_get_all_emails_by_label tool.")
         
         elif tool_name == "damien_apply_rules":
             try: apply_rules_params_model = ApplyRulesParams(**params_dict)
@@ -583,6 +621,73 @@ async def list_tools_endpoint():
             "description": "Adds or removes specified labels from emails. Returns a count of modified emails and a status message.",
             "input_schema": LabelEmailsParams.model_json_schema(),
             "output_schema": LabelEmailsOutput.model_json_schema()
+        },
+        {
+            "name": "damien_list_labels",
+            "description": "Lists all Gmail labels for the authenticated user, including both system labels (INBOX, SENT, etc.) and user-created labels. Returns detailed information about each label including message counts.",
+            "input_schema": ListLabelsParams.model_json_schema(),
+            "output_schema": ListLabelsOutput.model_json_schema()
+        },
+        {
+            "name": "damien_count_emails_by_label",
+            "description": "🔢 ENTERPRISE: Counts total emails with a specific label using pagination-aware search. Automatically handles Gmail's 100-result-per-page limit for accurate counts up to 10,000+ emails. More reliable than list_labels message counts.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "label_name": {
+                        "type": "string",
+                        "description": "Name of the label to count emails for"
+                    },
+                    "max_count": {
+                        "type": "integer",
+                        "default": 10000,
+                        "description": "Maximum number of emails to count (safety limit)"
+                    }
+                },
+                "required": ["label_name"]
+            },
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "label_name": {"type": "string"},
+                    "total_count": {"type": "integer"},
+                    "pages_processed": {"type": "integer"},
+                    "duration_seconds": {"type": "number"},
+                    "potentially_more_emails": {"type": "boolean"},
+                    "status_message": {"type": "string"}
+                }
+            }
+        },
+        {
+            "name": "damien_get_all_emails_by_label",
+            "description": "📧 ENTERPRISE: Gets ALL email IDs for a specific label using automatic pagination. Handles thousands of emails by paginating through Gmail's 100-result limit. Returns message IDs ready for bulk operations.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "label_name": {
+                        "type": "string",
+                        "description": "Name of the label to get emails for"
+                    },
+                    "max_emails": {
+                        "type": "integer",
+                        "default": 5000,
+                        "description": "Maximum number of emails to retrieve (safety limit)"
+                    }
+                },
+                "required": ["label_name"]
+            },
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "label_name": {"type": "string"},
+                    "message_ids": {"type": "array", "items": {"type": "string"}},
+                    "total_count": {"type": "integer"},
+                    "pages_processed": {"type": "integer"},
+                    "duration_seconds": {"type": "number"},
+                    "ready_for_bulk_operations": {"type": "boolean"},
+                    "status_message": {"type": "string"}
+                }
+            }
         },
         {
             "name": "damien_mark_emails",

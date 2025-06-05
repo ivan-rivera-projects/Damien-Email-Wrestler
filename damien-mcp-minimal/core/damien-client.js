@@ -169,7 +169,31 @@ export class DamienClient {
    */
   async makeRequest(endpoint, options = {}) {
     const url = `${this.baseUrl}${endpoint}`;
-    const timeout = options.timeout || this.defaultTimeout;
+    
+    // Intelligent timeout based on operation type
+    let intelligentTimeout = this.defaultTimeout;
+    
+    // Check if this is a large-scale operation that needs more time
+    if (options.body) {
+      try {
+        const requestBody = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
+        const toolName = requestBody.tool_name;
+        const params = requestBody.input || {};
+        
+        // Large-scale operations need longer timeouts
+        if (toolName && (toolName.includes('large_scale') || 
+                        toolName.includes('async') ||
+                        (params.target_count && params.target_count > 300) ||
+                        (params.max_emails && params.max_emails > 300))) {
+          intelligentTimeout = 120000; // 2 minutes for large operations
+          this.log(`Using extended timeout (${intelligentTimeout}ms) for large-scale operation: ${toolName}`);
+        }
+      } catch (e) {
+        // If parsing fails, use default timeout
+      }
+    }
+    
+    const timeout = options.timeout || intelligentTimeout;
     
     const requestOptions = {
       method: 'GET',

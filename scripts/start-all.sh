@@ -320,7 +320,23 @@ else
     echo "  - Smithery Adapter: logs/smithery-adapter.log"
 fi
 
-if [ "$MCP_HEALTHY" = true ] && [ "$ADAPTER_HEALTHY" = true ]; then
+if [ "$USE_MINIMAL" = true ]; then
+    # For minimal mode, check the appropriate variables
+    if [ "$BACKEND_MCP_HEALTHY" = true ] && [ "$MINIMAL_MCP_HEALTHY" = true ] && [ "$ADAPTER_HEALTHY" = true ]; then
+        ALL_HEALTHY=true
+    else
+        ALL_HEALTHY=false
+    fi
+else
+    # For standard mode, check standard variables
+    if [ "$MCP_HEALTHY" = true ] && [ "$ADAPTER_HEALTHY" = true ]; then
+        ALL_HEALTHY=true
+    else
+        ALL_HEALTHY=false
+    fi
+fi
+
+if [ "$ALL_HEALTHY" = true ]; then
     echo ""
     echo -e "${GREEN}🎉 All services are running successfully!${NC}"
     echo ""

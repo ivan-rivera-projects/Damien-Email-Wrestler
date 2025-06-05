@@ -224,6 +224,190 @@ class DamienAdapter:
         except Exception as e:
             logger.error(f"Unexpected error in list_emails_tool: {e}", exc_info=True)
             return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR"}
+
+    async def count_emails_by_label_tool(self, label_name: str, max_count: int = 10000) -> Dict[str, Any]:
+        """
+        Counts total emails with a specific label using pagination-aware search.
+        
+        This function automatically handles Gmail's 100-result-per-page limit by
+        using pagination to count all emails, making it suitable for enterprise
+        use cases with thousands of emails per label.
+        
+        Args:
+            label_name: Name of the label to count emails for
+            max_count: Maximum number of emails to count (safety limit)
+            
+        Returns:
+            Dict containing success status, total count, and pagination details
+        """
+        try:
+            g_client = await self._ensure_g_service_client()
+            logger.info(f"🔢 Starting pagination-aware count for label: {label_name}")
+            
+            total_count = 0
+            page_count = 0
+            page_token = None
+            query = f"label:{label_name}"
+            
+            # Track timing for performance analysis
+            import time
+            start_time = time.time()
+            
+            while total_count < max_count:
+                page_count += 1
+                logger.debug(f"📄 Processing page {page_count} for label count")
+                
+                # Get batch of 100 (Gmail's maximum per request)
+                result_data = self.damien_gmail_integration_module.list_messages(
+                    service=g_client,
+                    query_string=query,
+                    max_results=100,  # Gmail's hard limit
+                    page_token=page_token
+                )
+                
+                if not result_data:
+                    break
+                
+                # Count emails in this batch
+                batch_emails = result_data.get("messages", [])
+                batch_count = len(batch_emails)
+                total_count += batch_count
+                
+                logger.debug(f"📊 Page {page_count}: Found {batch_count} emails (total: {total_count})")
+                
+                # Check for next page
+                page_token = result_data.get("nextPageToken")
+                if not page_token:
+                    logger.info(f"✅ Reached end of results at page {page_count}")
+                    break
+                
+                # Safety check to prevent infinite loops
+                if page_count > 100:  # 100 pages = 10,000 emails max
+                    logger.warning(f"⚠️ Hit page limit (100 pages) for safety - counting stopped")
+                    break
+            
+            end_time = time.time()
+            duration = end_time - start_time
+            
+            # Check if we hit the max_count limit
+            potentially_more = total_count >= max_count
+            
+            status_msg = f"Counted {total_count} emails with label '{label_name}' across {page_count} pages in {duration:.2f}s"
+            if potentially_more:
+                status_msg += f" (may have more - hit {max_count} limit)"
+            
+            logger.info(f"🎯 {status_msg}")
+            
+            return {
+                "success": True,
+                "data": {
+                    "label_name": label_name,
+                    "total_count": total_count,
+                    "pages_processed": page_count,
+                    "duration_seconds": round(duration, 2),
+                    "potentially_more_emails": potentially_more,
+                    "status_message": status_msg
+                }
+            }
+            
+        except (DamienError, GmailApiError, InvalidParameterError) as e:
+            logger.error(f"Error in count_emails_by_label_tool: {e}", exc_info=True)
+            return {"success": False, "error_message": str(e), "error_code": e.__class__.__name__}
+        except Exception as e:
+            logger.error(f"Unexpected error in count_emails_by_label_tool: {e}", exc_info=True)
+            return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR"}
+
+    async def get_all_emails_by_label_tool(self, label_name: str, max_emails: int = 5000) -> Dict[str, Any]:
+        """
+        Gets ALL email IDs for a specific label using pagination.
+        
+        Enterprise-ready function that can handle thousands of emails by
+        automatically paginating through Gmail's 100-result-per-page limit.
+        
+        Args:
+            label_name: Name of the label to get emails for
+            max_emails: Maximum number of emails to retrieve (safety limit)
+            
+        Returns:
+            Dict containing all email IDs and metadata for bulk operations
+        """
+        try:
+            g_client = await self._ensure_g_service_client()
+            logger.info(f"📧 Getting ALL emails for label: {label_name} (max: {max_emails})")
+            
+            all_emails = []
+            page_count = 0
+            page_token = None
+            query = f"label:{label_name}"
+            
+            import time
+            start_time = time.time()
+            
+            while len(all_emails) < max_emails:
+                page_count += 1
+                logger.debug(f"📄 Fetching page {page_count} for label emails")
+                
+                # Get batch of 100 (Gmail's maximum per request)
+                result_data = self.damien_gmail_integration_module.list_messages(
+                    service=g_client,
+                    query_string=query,
+                    max_results=100,  # Gmail's hard limit
+                    page_token=page_token
+                )
+                
+                if not result_data:
+                    break
+                
+                # Collect emails in this batch
+                batch_emails = result_data.get("messages", [])
+                all_emails.extend(batch_emails)
+                
+                logger.debug(f"📊 Page {page_count}: Added {len(batch_emails)} emails (total: {len(all_emails)})")
+                
+                # Check for next page
+                page_token = result_data.get("nextPageToken")
+                if not page_token:
+                    logger.info(f"✅ Retrieved all emails at page {page_count}")
+                    break
+                
+                # Safety check
+                if page_count > 50:  # 50 pages = 5,000 emails max
+                    logger.warning(f"⚠️ Hit page limit (50 pages) for safety")
+                    break
+            
+            # Truncate to max_emails if needed
+            if len(all_emails) > max_emails:
+                all_emails = all_emails[:max_emails]
+                logger.info(f"✂️ Truncated to {max_emails} emails")
+            
+            end_time = time.time()
+            duration = end_time - start_time
+            
+            # Extract just the IDs for bulk operations
+            message_ids = [email["id"] for email in all_emails]
+            
+            status_msg = f"Retrieved {len(message_ids)} email IDs for label '{label_name}' in {duration:.2f}s"
+            logger.info(f"🎯 {status_msg}")
+            
+            return {
+                "success": True,
+                "data": {
+                    "label_name": label_name,
+                    "message_ids": message_ids,
+                    "total_count": len(message_ids),
+                    "pages_processed": page_count,
+                    "duration_seconds": round(duration, 2),
+                    "ready_for_bulk_operations": True,
+                    "status_message": status_msg
+                }
+            }
+            
+        except (DamienError, GmailApiError, InvalidParameterError) as e:
+            logger.error(f"Error in get_all_emails_by_label_tool: {e}", exc_info=True)
+            return {"success": False, "error_message": str(e), "error_code": e.__class__.__name__}
+        except Exception as e:
+            logger.error(f"Unexpected error in get_all_emails_by_label_tool: {e}", exc_info=True)
+            return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR"}
     
     async def get_email_details_tool(
         self,
@@ -595,34 +779,170 @@ class DamienAdapter:
             return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR", "data": {"modified_count": 0, "status_message": f"Unexpected error: {str(e)}"}}
 
     async def apply_rules_tool(self, params: ApplyRulesParams) -> Dict[str, Any]:
+        """
+        Smart rule application with automatic async routing for large operations.
+        
+        Automatically detects large-scale operations and routes them to async processing
+        to prevent timeouts and provide better user experience.
+        """
         try:
+            # Smart threshold detection for auto-async routing
+            ASYNC_THRESHOLD = 300  # Auto-async for 300+ emails (lowered for demo)
+            scan_limit = params.scan_limit or 1000
+            
             query_parts = []
             if params.gmail_query_filter: query_parts.append(params.gmail_query_filter)
             if params.date_after: query_parts.append(f"after:{params.date_after.replace('/', '-')}") 
             if params.date_before: query_parts.append(f"before:{params.date_before.replace('/', '-')}")
             final_query = " ".join(query_parts).strip()
             if params.all_mail: final_query = ""
-            g_client = await self._ensure_g_service_client()
-            logger.info(
-                f"Adapter: Applying rules with effective query: '{final_query}', Dry run: {params.dry_run}, "
-                f"Detailed IDs: {params.include_detailed_ids}"
-            )
-            summary_dict = self.damien_rules_module.apply_rules_to_mailbox(
-                g_service_client=g_client,
-                gmail_api_service=self.damien_gmail_module,
-                gmail_query_filter=final_query if final_query else None,
-                rule_ids_to_apply=params.rule_ids_to_apply,
-                dry_run=params.dry_run,
-                scan_limit=params.scan_limit,
-                include_detailed_ids=params.include_detailed_ids # Pass new parameter
-            )
-            return {"success": True, "data": summary_dict}
+            
+            # Determine if operation should be async based on size
+            should_use_async = scan_limit > ASYNC_THRESHOLD
+            
+            if should_use_async and not params.dry_run:
+                # Route to async processing for large operations
+                logger.info(
+                    f"🚀 Auto-routing to async processing: {scan_limit} emails > {ASYNC_THRESHOLD} threshold"
+                )
+                
+                return await self._apply_rules_async(params, final_query)
+            else:
+                # Process synchronously for smaller operations or dry runs
+                logger.info(
+                    f"⚡ Processing synchronously: {scan_limit} emails <= {ASYNC_THRESHOLD} threshold"
+                )
+                
+                return await self._apply_rules_sync(params, final_query)
+                
         except (DamienError, GmailApiError, InvalidParameterError, RuleStorageError) as e:
             logger.error(f"Error in apply_rules_tool: {e}", exc_info=True)
             return {"success": False, "error_message": str(e), "error_code": e.__class__.__name__}
         except Exception as e:
             logger.error(f"Unexpected error in apply_rules_tool: {e}", exc_info=True)
             return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR"}
+    
+    async def _apply_rules_sync(self, params: ApplyRulesParams, final_query: str) -> Dict[str, Any]:
+        """Synchronous rule application for smaller operations."""
+        g_client = await self._ensure_g_service_client()
+        logger.info(
+            f"Adapter: Applying rules synchronously with query: '{final_query}', Dry run: {params.dry_run}, "
+            f"Detailed IDs: {params.include_detailed_ids}"
+        )
+        
+        summary_dict = self.damien_rules_module.apply_rules_to_mailbox(
+            g_service_client=g_client,
+            gmail_api_service=self.damien_gmail_module,
+            gmail_query_filter=final_query if final_query else None,
+            rule_ids_to_apply=params.rule_ids_to_apply,
+            dry_run=params.dry_run,
+            scan_limit=params.scan_limit,
+            include_detailed_ids=params.include_detailed_ids
+        )
+        
+        return {
+            "success": True, 
+            "data": summary_dict,
+            "processing_mode": "synchronous"
+        }
+    
+    async def _apply_rules_async(self, params: ApplyRulesParams, final_query: str) -> Dict[str, Any]:
+        """Asynchronous rule application for large operations."""
+        try:
+            # Import async processor
+            from ..tools.async_tools import async_processor
+            
+            # Create task parameters
+            task_params = {
+                "gmail_query_filter": final_query,
+                "rule_ids_to_apply": params.rule_ids_to_apply,
+                "dry_run": params.dry_run,
+                "scan_limit": params.scan_limit,
+                "include_detailed_ids": params.include_detailed_ids,
+                "date_after": params.date_after,
+                "date_before": params.date_before,
+                "all_mail": params.all_mail
+            }
+            
+            # Submit to async processing
+            job_id = await async_processor.submit_task(
+                name=f"Rule application ({params.scan_limit} emails)",
+                processor_func=self._async_rule_processor,
+                parameters=task_params
+            )
+            
+            # Estimate processing time
+            estimated_minutes = max(1, params.scan_limit // 200)  # ~1 minute per 200 emails
+            
+            logger.info(f"🎯 Started async rule application job {job_id} for {params.scan_limit} emails")
+            
+            return {
+                "success": True,
+                "processing_mode": "asynchronous",
+                "job_id": job_id,
+                "status": "started",
+                "message": f"Background rule application started for {params.scan_limit} emails",
+                "estimated_duration_minutes": estimated_minutes,
+                "data": {
+                    "emails_to_process": params.scan_limit,
+                    "async_threshold_triggered": True,
+                    "tracking_info": {
+                        "check_progress": f"damien_job_get_status(job_id='{job_id}')",
+                        "get_results": f"damien_job_get_result(job_id='{job_id}') when complete"
+                    }
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to start async rule processing: {e}")
+            # Fallback to sync processing if async fails
+            logger.info("🔄 Falling back to synchronous processing due to async failure")
+            return await self._apply_rules_sync(params, final_query)
+    
+    async def _async_rule_processor(self, task_params: Dict[str, Any]) -> Dict[str, Any]:
+        """Background processor for rule application."""
+        try:
+            # Get authenticated client
+            g_client = await self._ensure_g_service_client()
+            
+            logger.info(f"📊 Background processing: Applying rules to {task_params.get('scan_limit')} emails")
+            
+            # Apply rules using the standard method
+            summary_dict = self.damien_rules_module.apply_rules_to_mailbox(
+                g_service_client=g_client,
+                gmail_api_service=self.damien_gmail_module,
+                gmail_query_filter=task_params.get("gmail_query_filter"),
+                rule_ids_to_apply=task_params.get("rule_ids_to_apply"),
+                dry_run=task_params.get("dry_run", False),
+                scan_limit=task_params.get("scan_limit", 1000),
+                include_detailed_ids=task_params.get("include_detailed_ids", False)
+            )
+            
+            # Add async processing metadata
+            summary_dict["processing_mode"] = "asynchronous_completed"
+            summary_dict["async_benefits"] = {
+                "no_timeout_risk": True,
+                "background_processing": True,
+                "user_workflow_uninterrupted": True
+            }
+            
+            logger.info(f"✅ Background rule application completed successfully")
+            
+            return {
+                "status": "success",
+                "summary": summary_dict,
+                "emails_processed": summary_dict.get("emails_scanned", 0),
+                "rules_applied": summary_dict.get("total_rules_applied", 0),
+                "processing_time_seconds": summary_dict.get("total_time_seconds", 0)
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Background rule processing failed: {e}")
+            return {
+                "status": "failed",
+                "error": str(e),
+                "error_type": "background_processing_error"
+            }
 
     async def list_rules_tool(self, summary_view: bool = True) -> Dict[str, Any]:
         try:
@@ -795,5 +1115,93 @@ class DamienAdapter:
         except Exception as e:
             logger.error(f"Unexpected error in delete_emails_permanently_tool: {e}", exc_info=True)
             return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR", "data": {"deleted_count": 0, "status_message": f"Unexpected error: {str(e)}"}}
+
+    async def list_labels_tool(self) -> Dict[str, Any]:
+        """List all Gmail labels for the authenticated user.
+        
+        Returns:
+            Dict containing success status and label data including:
+            - labels: List of label objects with id, name, type, and metadata
+            - total_count: Total number of labels
+            - system_labels: Count of system labels (INBOX, SENT, etc.)
+            - user_labels: Count of user-created labels
+        """
+        try:
+            g_client = await self._ensure_g_service_client()
+            logger.debug("Adapter: Fetching all Gmail labels")
+            
+            # Use Gmail API to list all labels
+            results = g_client.users().labels().list(userId='me').execute()
+            labels = results.get('labels', [])
+            
+            # Process and categorize labels
+            processed_labels = []
+            system_label_count = 0
+            user_label_count = 0
+            
+            for label in labels:
+                label_info = {
+                    "id": label.get("id", ""),
+                    "name": label.get("name", ""),
+                    "type": label.get("type", ""),
+                    "messages_total": label.get("messagesTotal", 0),
+                    "messages_unread": label.get("messagesUnread", 0),
+                    "threads_total": label.get("threadsTotal", 0),
+                    "threads_unread": label.get("threadsUnread", 0)
+                }
+                
+                # Categorize labels
+                if label.get("type") == "system":
+                    system_label_count += 1
+                else:
+                    user_label_count += 1
+                
+                processed_labels.append(label_info)
+            
+            # Sort labels: system labels first, then user labels alphabetically
+            processed_labels.sort(key=lambda x: (x["type"] != "system", x["name"].lower()))
+            
+            status_msg = f"Successfully retrieved {len(processed_labels)} labels ({system_label_count} system, {user_label_count} user-created)"
+            logger.info(status_msg)
+            
+            return {
+                "success": True,
+                "data": {
+                    "labels": processed_labels,
+                    "total_count": len(processed_labels),
+                    "system_labels": system_label_count,
+                    "user_labels": user_label_count,
+                    "status_message": status_msg
+                }
+            }
+            
+        except (DamienError, GmailApiError, InvalidParameterError) as e:
+            logger.error(f"Error in list_labels_tool: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error_message": str(e),
+                "error_code": e.__class__.__name__,
+                "data": {
+                    "labels": [],
+                    "total_count": 0,
+                    "system_labels": 0,
+                    "user_labels": 0,
+                    "status_message": str(e)
+                }
+            }
+        except Exception as e:
+            logger.error(f"Unexpected error in list_labels_tool: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error_message": f"Unexpected error: {str(e)}",
+                "error_code": "UNEXPECTED_ADAPTER_ERROR",
+                "data": {
+                    "labels": [],
+                    "total_count": 0,
+                    "system_labels": 0,
+                    "user_labels": 0,
+                    "status_message": f"Unexpected error: {str(e)}"
+                }
+            }
 
     # Add more methods for other tools here

@@ -440,7 +440,7 @@ class AIIntelligenceTools:
                 )
             else:  # text format
                 formatted_insights = await self.cli_bridge.format_insights_as_text(
-                    insights=insights_result
+                    insights_result
                 )
             
             processing_time = time.time() - start_time
@@ -498,9 +498,7 @@ class AIIntelligenceTools:
             
             # Step 1: Analyze current inbox state
             self.progress_tracker.update_progress(operation.operation_id, message="Analyzing current inbox state...")
-            inbox_analysis = await self.cli_bridge.analyze_inbox_state(
-                include_metrics=True
-            )
+            inbox_analysis = await self.cli_bridge.analyze_inbox_state()
             self.progress_tracker.advance_step(operation.operation_id, "Inbox analysis completed")
             
             # Step 2: Generate optimization plan
@@ -609,123 +607,153 @@ class AIIntelligenceTools:
 
     async def damien_ai_analyze_emails_large_scale(
         self,
-        target_count: int = 5000,
-        days: int = 90,
-        min_confidence: float = 0.85,
+        target_count: int = 1000,  # FIXED: Reduced default from 5000 to 1000
+        days: int = 30,            # FIXED: Reduced default from 90 to 30
+        min_confidence: float = 0.75,  # FIXED: Reduced from 0.85 to 0.75
         use_statistical_validation: bool = True,
         query: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Large-scale email analysis with statistical rigor for 1000+ emails.
+        Large-scale email analysis with statistical rigor for 500+ emails.
         
-        This method overcomes the 50-email limitation by using the enhanced CLIBridge
-        to collect emails in batches and perform comprehensive pattern analysis with
-        proper statistical confidence scoring.
+        FIXED VERSION: Addresses memory issues, rate limiting, and error propagation
+        that were causing internal server errors.
         
         Args:
-            target_count: Target number of emails to analyze (default: 5000)
-            days: Number of days to look back (default: 90)
-            min_confidence: Minimum confidence threshold (default: 0.85)
+            target_count: Target number of emails to analyze (default: 1000, max: 2000)
+            days: Number of days to look back (default: 30, max: 90)
+            min_confidence: Minimum confidence threshold (default: 0.75)
             use_statistical_validation: Enable statistical validation (default: True)
             query: Optional additional Gmail query filter
             
         Returns:
             Dict containing comprehensive analysis with statistical confidence metrics
         """
-        # Ensure CLI bridge is properly initialized
-        if self.cli_bridge:
-            await self.cli_bridge.ensure_initialized()
+        # SAFETY: Enforce reasonable limits to prevent resource exhaustion
+        target_count = min(target_count, 2000)  # Hard cap at 2000 emails
+        days = min(days, 90)  # Hard cap at 90 days
         
         start_time = time.time()
+        logger.info(f"🔍 Starting large-scale analysis: {target_count} emails, {days} days")
         
         try:
-            # Create an async operation for tracking
-            operation = self.progress_tracker.create_operation(
-                name="Large-Scale Email Analysis",
-                total_items=target_count // 100 + 4,  # Batches + processing steps
-                operation_id=f"large_email_analysis_{int(time.time())}"
-            )
+            # FIXED: Simplified progress tracking to avoid dependency issues
+            operation_id = f"large_analysis_{int(time.time())}"
             
-            # Step 1: Batch email collection using enhanced CLIBridge
-            self.progress_tracker.update_progress(
-                operation.operation_id, 
-                message=f"Collecting up to {target_count} emails from Gmail..."
-            )
+            # FIXED: Safer CLI bridge initialization with timeout
+            if self.cli_bridge:
+                try:
+                    # Add timeout to prevent hanging
+                    await asyncio.wait_for(
+                        self.cli_bridge.ensure_initialized(), 
+                        timeout=30.0
+                    )
+                except asyncio.TimeoutError:
+                    logger.error("CLI bridge initialization timeout")
+                    return {
+                        "success": False,
+                        "error": "CLI bridge initialization timeout",
+                        "sample_size": 0
+                    }
             
-            collected_emails = await self.cli_bridge.fetch_emails(
-                days=days,
-                max_emails=target_count,
-                query=query
-            )
+            logger.info(f"📧 Collecting up to {target_count} emails...")
+            
+            # FIXED: More conservative email collection with better error handling
+            try:
+                collected_emails = await asyncio.wait_for(
+                    self.cli_bridge.fetch_emails(
+                        days=days,
+                        max_emails=target_count,
+                        query=query
+                    ),
+                    timeout=120.0  # 2 minute timeout for email collection
+                )
+            except asyncio.TimeoutError:
+                logger.error("Email collection timeout")
+                return {
+                    "success": False,
+                    "error": "Email collection timeout - try reducing target_count or days",
+                    "sample_size": 0
+                }
             
             emails_list = collected_emails.get("emails", [])
             actual_count = len(emails_list)
             
-            self.progress_tracker.advance_step(
-                operation.operation_id, 
-                f"Collected {actual_count} emails in {collected_emails.get('batches_processed', 0)} batches"
-            )
+            logger.info(f"✅ Collected {actual_count} emails from {collected_emails.get('batches_processed', 0)} batches")
             
-            # Step 2: Statistical validation
+            # FIXED: Early return for empty results instead of continuing processing
+            if actual_count == 0:
+                return {
+                    "success": False,
+                    "error": "No emails found matching criteria",
+                    "sample_size": 0,
+                    "suggestions": [
+                        "Try increasing the 'days' parameter",
+                        "Remove or modify the 'query' filter",
+                        "Check Gmail connectivity"
+                    ]
+                }
+            
+            # FIXED: Simplified statistical validation
             if use_statistical_validation:
-                self.progress_tracker.update_progress(
-                    operation.operation_id,
-                    message="Validating statistical significance..."
-                )
+                logger.info("📊 Validating statistical significance...")
                 
-                if actual_count < 1000:
-                    # Log warning but continue with reduced confidence
-                    logger.warning(f"Sample size {actual_count} < 1000 may reduce confidence")
+                if actual_count < 100:
                     statistical_adequacy = "insufficient"
-                    confidence_warning = "Sample size below recommended 1000 emails for high confidence"
+                    confidence_warning = f"Sample size {actual_count} is very small - results may not be reliable"
+                elif actual_count < 500:
+                    statistical_adequacy = "marginal"  
+                    confidence_warning = f"Sample size {actual_count} is adequate but more data would improve confidence"
                 else:
                     statistical_adequacy = "adequate"
                     confidence_warning = None
-                
-                self.progress_tracker.advance_step(
-                    operation.operation_id,
-                    f"Statistical validation complete: {statistical_adequacy}"
+                    
+                logger.info(f"📈 Statistical validation: {statistical_adequacy}")
+            
+            # FIXED: Pattern analysis with timeout protection
+            logger.info("🔍 Analyzing email patterns...")
+            
+            try:
+                analysis_result = await asyncio.wait_for(
+                    self.cli_bridge.analyze_email_patterns(
+                        emails=emails_list,
+                        min_confidence=min_confidence
+                    ),
+                    timeout=90.0  # 90 second timeout for pattern analysis
                 )
+            except asyncio.TimeoutError:
+                logger.error("Pattern analysis timeout")
+                return {
+                    "success": False,
+                    "error": "Pattern analysis timeout - dataset too large",
+                    "sample_size": actual_count,
+                    "suggestion": "Try reducing target_count parameter"
+                }
             
-            # Step 3: AI pattern analysis using existing infrastructure
-            self.progress_tracker.update_progress(
-                operation.operation_id,
-                message="Analyzing email patterns with AI..."
-            )
+            logger.info("✅ Pattern analysis complete")
             
-            analysis_result = await self.cli_bridge.analyze_email_patterns(
-                emails=emails_list,
-                min_confidence=min_confidence
-            )
+            # FIXED: Safer confidence calculation with error handling
+            try:
+                confidence_score = self._calculate_statistical_confidence(
+                    sample_size=actual_count,
+                    patterns=analysis_result.get("patterns", [])
+                )
+            except Exception as e:
+                logger.warning(f"Confidence calculation failed: {e}")
+                confidence_score = {
+                    "overall_confidence": 0.5,
+                    "sample_adequacy": "unknown",
+                    "error": str(e)
+                }
             
-            self.progress_tracker.advance_step(
-                operation.operation_id,
-                "Pattern analysis complete"
-            )
-            
-            # Step 4: Enhanced statistical confidence calculation
-            self.progress_tracker.update_progress(
-                operation.operation_id,
-                message="Calculating statistical confidence metrics..."
-            )
-            
-            confidence_score = self._calculate_statistical_confidence(
-                sample_size=actual_count,
-                patterns=analysis_result.get("patterns", [])
-            )
-            
-            self.progress_tracker.advance_step(
-                operation.operation_id,
-                "Statistical analysis complete"
-            )
-            
-            # Compile comprehensive results
+            # FIXED: Simplified result compilation
             processing_time = time.time() - start_time
             
             enhanced_result = {
-                **analysis_result,
+                "success": True,
                 "sample_size": actual_count,
                 "target_count": target_count,
+                "patterns": analysis_result.get("patterns", []),
                 "statistical_confidence": confidence_score,
                 "collection_metadata": {
                     "batches_processed": collected_emails.get("batches_processed", 0),
@@ -738,29 +766,32 @@ class AIIntelligenceTools:
                     "emails_per_second": round(actual_count / processing_time, 2) if processing_time > 0 else 0,
                     "statistical_adequacy": statistical_adequacy if use_statistical_validation else "not_validated"
                 },
-                "recommendations_enhanced": self._generate_enhanced_recommendations(
+                "recommendations": self._generate_enhanced_recommendations(
                     actual_count, 
                     analysis_result.get("patterns", []),
                     confidence_score
                 )
             }
             
-            if confidence_warning:
+            # Add warning if present
+            if use_statistical_validation and confidence_warning:
                 enhanced_result["warnings"] = [confidence_warning]
             
-            logger.info(
-                f"Large-scale analysis completed: {actual_count} emails processed in {processing_time:.2f}s"
-            )
-            
+            logger.info(f"🎉 Large-scale analysis completed: {actual_count} emails in {processing_time:.2f}s")
             return enhanced_result
             
         except Exception as e:
-            logger.error(f"Large-scale email analysis failed: {e}")
+            logger.error(f"❌ Large-scale email analysis failed: {str(e)}", exc_info=True)
             return {
                 "success": False,
-                "error": str(e),
+                "error": f"Analysis failed: {str(e)}",
                 "sample_size": 0,
-                "processing_time_seconds": time.time() - start_time
+                "processing_time_seconds": time.time() - start_time,
+                "suggestions": [
+                    "Try reducing target_count parameter",
+                    "Check Gmail API connectivity", 
+                    "Verify CLI bridge is properly configured"
+                ]
             }
     
     def _calculate_statistical_confidence(self, sample_size: int, patterns: List[Any]) -> Dict[str, Any]:

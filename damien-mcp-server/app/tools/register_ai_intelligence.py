@@ -254,28 +254,28 @@ AI_INTELLIGENCE_TOOLS = {
     
     "damien_ai_analyze_emails_large_scale": ToolDefinition(
         name="damien_ai_analyze_emails_large_scale",
-        description="Comprehensive large-scale email analysis with statistical rigor for 1000+ emails. Overcomes 50-email limitation through batch processing with enterprise-grade confidence scoring.",
+        description="Large-scale email analysis with statistical rigor for 500+ emails. FIXED VERSION with safer defaults and better error handling to prevent server crashes.",
         input_schema={
             "type": "object",
             "properties": {
                 "target_count": {
                     "type": "integer",
-                    "description": "Target number of emails to analyze (default: 5000)",
-                    "default": 5000,
-                    "minimum": 1000,
-                    "maximum": 10000
+                    "description": "Target number of emails to analyze (default: 1000, max: 2000)",
+                    "default": 1000,
+                    "minimum": 100,
+                    "maximum": 2000
                 },
                 "days": {
-                    "type": "integer",
-                    "description": "Number of days to look back (default: 90)",
-                    "default": 90,
+                    "type": "integer", 
+                    "description": "Number of days to look back (default: 30, max: 90)",
+                    "default": 30,
                     "minimum": 1,
-                    "maximum": 365
+                    "maximum": 90
                 },
                 "min_confidence": {
                     "type": "number",
-                    "description": "Minimum confidence threshold (default: 0.85)",
-                    "default": 0.85,
+                    "description": "Minimum confidence threshold (default: 0.75)",
+                    "default": 0.75,
                     "minimum": 0.0,
                     "maximum": 1.0
                 },
@@ -301,16 +301,24 @@ def register_ai_intelligence_tools():
     """Register all AI intelligence tools with the tool registry."""
     logger.info("🚀 Starting registration of AI intelligence tools...")
     
+    # DEBUG: Check if dictionary has tools
+    logger.info(f"🔍 Found {len(AI_INTELLIGENCE_TOOLS)} AI tools to register")
+    
     # Import the handler functions (CRITICAL FIX)
-    from .ai_intelligence import (
-        analyze_emails_handler,
-        suggest_rules_handler,
-        quick_test_handler,
-        create_rule_handler,
-        get_insights_handler,
-        optimize_inbox_handler,
-        large_scale_analysis_handler
-    )
+    try:
+        from .ai_intelligence import (
+            analyze_emails_handler,
+            suggest_rules_handler,
+            quick_test_handler,
+            create_rule_handler,
+            get_insights_handler,
+            optimize_inbox_handler,
+            large_scale_analysis_handler
+        )
+        logger.info("✅ Successfully imported all AI intelligence handlers")
+    except Exception as e:
+        logger.error(f"❌ Failed to import AI intelligence handlers: {e}", exc_info=True)
+        return
     
     # Map handler names to actual handler functions
     handlers = {
@@ -324,12 +332,17 @@ def register_ai_intelligence_tools():
     }
     
     # Register each AI intelligence tool with proper handlers
+    registered_count = 0
     for tool_name, tool_def in AI_INTELLIGENCE_TOOLS.items():
-        handler = handlers[tool_def.handler_name]
-        tool_registry.register_tool(tool_def, handler)
-        logger.info(f"✅ Registered {tool_name} with handler {tool_def.handler_name}")
+        try:
+            handler = handlers[tool_def.handler_name]
+            tool_registry.register_tool(tool_def, handler)
+            logger.info(f"✅ Registered {tool_name} with handler {tool_def.handler_name}")
+            registered_count += 1
+        except Exception as e:
+            logger.error(f"❌ Failed to register {tool_name}: {e}", exc_info=True)
     
-    logger.info(f"✅ Successfully registered {len(AI_INTELLIGENCE_TOOLS)} AI intelligence tools with MCP handlers")
+    logger.info(f"✅ Successfully registered {registered_count}/{len(AI_INTELLIGENCE_TOOLS)} AI intelligence tools with MCP handlers")
 
 
 # Export for import in main.py

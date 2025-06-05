@@ -374,3 +374,28 @@ class DeleteEmailsPermanentlyOutput(BaseModel):
     """Output for permanently deleting emails. (Placeholder)"""
     deleted_count: int = 0
     status_message: str = ""
+
+# --- Labels Tool Models ---
+
+class ListLabelsParams(MCPToolCallInput):
+    """Parameters for listing Gmail labels."""
+    # No parameters needed - lists all labels for the authenticated user
+    pass
+
+class LabelInfo(BaseModel):
+    """Information about a single Gmail label."""
+    id: str = Field(description="Unique identifier for the label")
+    name: str = Field(description="Display name of the label")
+    type: str = Field(description="Type of label (system or user)")
+    messages_total: int = Field(default=0, description="Total number of messages with this label")
+    messages_unread: int = Field(default=0, description="Number of unread messages with this label")
+    threads_total: int = Field(default=0, description="Total number of threads with this label")
+    threads_unread: int = Field(default=0, description="Number of unread threads with this label")
+
+class ListLabelsOutput(BaseModel):
+    """Output for listing Gmail labels."""
+    labels: List[LabelInfo] = Field(default_factory=list, description="List of all Gmail labels")
+    total_count: int = Field(default=0, description="Total number of labels")
+    system_labels: int = Field(default=0, description="Number of system labels")
+    user_labels: int = Field(default=0, description="Number of user-created labels")
+    status_message: str = Field(default="", description="Status message about the operation")

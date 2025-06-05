@@ -49,7 +49,15 @@ async def startup_event():
     register_draft_tools()
     register_settings_tools()
     register_thread_tools()
-    register_ai_intelligence_tools()  # 🚀 Phase 4: AI Intelligence Tools
+    
+    # DEBUG: Prove we're about to call AI intelligence registration
+    logger.info("🔍 About to register AI Intelligence tools...")
+    try:
+        register_ai_intelligence_tools()  # 🚀 Phase 4: AI Intelligence Tools
+        logger.info("✅ AI Intelligence tools registration completed")
+    except Exception as e:
+        logger.error(f"❌ AI Intelligence tools registration failed: {e}", exc_info=True)
+    
     register_async_tools()  # 🔥 Background Job Processing Tools
     
     logger.info(f"🎉 MCP Server started with {len(tool_registry.get_all_tools())} tools registered")
