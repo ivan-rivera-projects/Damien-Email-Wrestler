@@ -16,6 +16,7 @@ functionality provided by Damien's core_api.
 from typing import Any, Dict, List, Optional
 import logging
 import logging as py_logging # To get logging.DEBUG
+import time
 from damien_cli.core import logging_setup as damien_cli_logging_setup # For CLI logging setup
 
 # Import Damien core_api components
@@ -477,29 +478,43 @@ class DamienAdapter:
             # CASE 1: Direct mode with message_ids
             if message_ids:
                 logger.debug(f"Adapter: Trashing {len(message_ids)} emails using direct mode")
-                success = self.damien_gmail_integration_module.batch_trash_messages(
-                    service=g_client, 
-                    message_ids=message_ids
-                )
-                
-                if success:
-                    status_msg = f"Successfully moved {len(message_ids)} email(s) to trash."
-                    logger.info(status_msg)
-                    return {
-                        "success": True, 
-                        "data": {
-                            "trashed_count": len(message_ids), 
-                            "status_message": status_msg,
-                            "mode": "direct"
+                try:
+                    # Use the robust gmail_api_service instead of gmail_integration
+                    result = damien_gmail_module.batch_trash_messages(
+                        gmail_service=g_client, 
+                        message_ids=message_ids
+                    )
+                    
+                    if result.get("success"):
+                        status_msg = result.get("message", f"Successfully moved {len(message_ids)} email(s) to trash.")
+                        logger.info(status_msg)
+                        return {
+                            "success": True, 
+                            "data": {
+                                "trashed_count": result.get("trashed_count", len(message_ids)), 
+                                "status_message": status_msg,
+                                "mode": "direct"
+                            }
                         }
-                    }
-                else:
-                    status_msg = f"Operation to move {len(message_ids)} email(s) to trash reported non-true by core API."
-                    logger.warning(status_msg)
+                    else:
+                        status_msg = f"Operation to move {len(message_ids)} email(s) to trash failed."
+                        logger.warning(status_msg)
+                        return {
+                            "success": False, 
+                            "error_message": status_msg, 
+                            "error_code": "GMAIL_API_OPERATION_FAILED", 
+                            "data": {
+                                "trashed_count": 0, 
+                                "status_message": status_msg
+                            }
+                        }
+                except Exception as e:
+                    status_msg = f"Exception during trash operation: {str(e)}"
+                    logger.error(status_msg)
                     return {
                         "success": False, 
                         "error_message": status_msg, 
-                        "error_code": "CORE_API_OPERATION_FAILED", 
+                        "error_code": "GMAIL_API_EXCEPTION", 
                         "data": {
                             "trashed_count": 0, 
                             "status_message": status_msg
@@ -1086,28 +1101,45 @@ class DamienAdapter:
             logger.error(f"Unexpected error in delete_rule_tool: {e}", exc_info=True)
             return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR"}
 
-    async def delete_emails_permanently_tool(self, message_ids: List[str]) -> Dict[str, Any]:
-        """Permanently deletes a list of emails using Damien's core_api. This action is IRREVERSIBLE."""
-        if not message_ids:
-            return {"success": False, "error_message": "No message IDs provided to permanently delete.", "error_code": "INVALID_PARAMETER", "data": {"deleted_count": 0, "status_message": "No message IDs provided."}}
+    async def delete_emails_permanently_tool(
+        self, 
+        message_ids: Optional[List[str]] = None,
+        query: Optional[str] = None,
+        max_emails: int = 1000,
+        batch_size: int = 1000,
+        use_async: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Enhanced bulk delete tool supporting both message IDs and query-based deletion.
+        Follows Gmail API best practices with efficient batch processing.
+        """
+        # Validate parameters
+        if not message_ids and not query:
+            return {
+                "success": False, 
+                "error_message": "Either 'message_ids' or 'query' must be provided for deletion.", 
+                "error_code": "INVALID_PARAMETER", 
+                "data": {"deleted_count": 0, "status_message": "No deletion criteria provided."}
+            }
+        
+        if message_ids and query:
+            return {
+                "success": False,
+                "error_message": "Cannot specify both 'message_ids' and 'query'. Choose one deletion method.",
+                "error_code": "INVALID_PARAMETER",
+                "data": {"deleted_count": 0, "status_message": "Conflicting deletion parameters."}
+            }
+
         try:
-            logger.warning(f"Adapter: PERMANENTLY DELETING {len(message_ids)} emails: {message_ids}. THIS IS IRREVERSIBLE.")
             g_client = await self._ensure_g_service_client()
-            # The CLI's batch_delete_permanently function returns a boolean.
-            success = damien_gmail_integration_module.batch_delete_permanently(
-                service=g_client,
-                message_ids=message_ids
-            )
             
-            if success:
-                deleted_count = len(message_ids)
-                status_msg = f"Successfully initiated permanent deletion for {deleted_count} email(s)."
-                logger.info(status_msg)
-                return {"success": True, "data": {"deleted_count": deleted_count, "status_message": status_msg}}
-            else:
-                status_msg = f"Permanent deletion operation reported non-true by core API for {len(message_ids)} email(s)."
-                logger.warning(status_msg)
-                return {"success": False, "error_message": status_msg, "error_code": "CORE_API_OPERATION_FAILED", "data": {"deleted_count": 0, "status_message": status_msg}}
+            # Handle message_ids approach (existing functionality)
+            if message_ids:
+                return await self._delete_by_message_ids(g_client, message_ids, batch_size)
+            
+            # Handle query-based approach (new functionality)
+            if query:
+                return await self._delete_by_query(g_client, query, max_emails, batch_size, use_async)
 
         except (DamienError, GmailApiError, InvalidParameterError) as e:
             logger.error(f"Error in delete_emails_permanently_tool: {e}", exc_info=True)
@@ -1115,6 +1147,215 @@ class DamienAdapter:
         except Exception as e:
             logger.error(f"Unexpected error in delete_emails_permanently_tool: {e}", exc_info=True)
             return {"success": False, "error_message": f"Unexpected error: {str(e)}", "error_code": "UNEXPECTED_ADAPTER_ERROR", "data": {"deleted_count": 0, "status_message": f"Unexpected error: {str(e)}"}}
+
+    async def _delete_by_message_ids(self, g_client, message_ids: List[str], batch_size: int) -> Dict[str, Any]:
+        """Handle deletion by specific message IDs with batching."""
+        if not message_ids:
+            return {"success": False, "error_message": "No message IDs provided.", "error_code": "INVALID_PARAMETER", "data": {"deleted_count": 0, "status_message": "No message IDs provided."}}
+        
+        logger.warning(f"Adapter: PERMANENTLY DELETING {len(message_ids)} emails by IDs. THIS IS IRREVERSIBLE.")
+        
+        total_deleted = 0
+        
+        # Process in chunks following Gmail API best practices
+        for i in range(0, len(message_ids), batch_size):
+            chunk = message_ids[i:i + batch_size]
+            logger.debug(f"Processing deletion batch {i//batch_size + 1}: {len(chunk)} emails")
+            
+            success = self.damien_gmail_integration_module.batch_delete_permanently(
+                service=g_client,
+                message_ids=chunk
+            )
+            
+            if success:
+                total_deleted += len(chunk)
+                logger.info(f"Successfully deleted batch of {len(chunk)} emails")
+            else:
+                logger.error(f"Failed to delete batch of {len(chunk)} emails")
+                return {
+                    "success": False,
+                    "error_message": f"Batch deletion failed after deleting {total_deleted} emails",
+                    "error_code": "BATCH_OPERATION_FAILED",
+                    "data": {"deleted_count": total_deleted, "status_message": f"Partial deletion: {total_deleted}/{len(message_ids)}"}
+                }
+        
+        status_msg = f"Successfully initiated permanent deletion for {total_deleted} email(s)."
+        logger.info(status_msg)
+        return {"success": True, "data": {"deleted_count": total_deleted, "status_message": status_msg}}
+
+    async def _delete_by_query(self, g_client, query: str, max_emails: int, batch_size: int, use_async: bool) -> Dict[str, Any]:
+        """Handle deletion by Gmail query with efficient batch processing."""
+        logger.warning(f"Adapter: PERMANENTLY DELETING emails matching query '{query}' (max: {max_emails}). THIS IS IRREVERSIBLE.")
+        
+        # For large operations, consider async processing
+        if use_async and max_emails >= 500:
+            return await self._delete_by_query_async(g_client, query, max_emails, batch_size)
+        
+        # Get message IDs matching the query
+        try:
+            # Use existing list_messages functionality to get IDs
+            result = self.damien_gmail_integration_module.list_messages(
+                service=g_client,
+                query_string=query,
+                max_results=max_emails,
+                page_token=None,
+                include_headers=[]  # We only need IDs
+            )
+            
+            if not result or "messages" not in result:
+                return {
+                    "success": True,
+                    "data": {"deleted_count": 0, "status_message": "No emails found matching the query."}
+                }
+            
+            # Extract message IDs
+            message_ids = [msg["id"] for msg in result["messages"]]
+            
+            if not message_ids:
+                return {
+                    "success": True,
+                    "data": {"deleted_count": 0, "status_message": "No emails found matching the query."}
+                }
+            
+            logger.info(f"Found {len(message_ids)} emails matching query '{query}'")
+            
+            # Use the existing batch deletion logic
+            return await self._delete_by_message_ids(g_client, message_ids, batch_size)
+            
+        except Exception as e:
+            logger.error(f"Error getting emails for query '{query}': {e}")
+            return {
+                "success": False,
+                "error_message": f"Failed to retrieve emails for query: {str(e)}",
+                "error_code": "QUERY_PROCESSING_ERROR",
+                "data": {"deleted_count": 0, "status_message": f"Query failed: {query}"}
+            }
+
+    async def _delete_by_query_async(self, g_client, query: str, max_emails: int, batch_size: int) -> Dict[str, Any]:
+        """Handle large-scale deletion with async job processing."""
+        # Import async processor if available
+        try:
+            from app.services.async_processor import AsyncProcessor
+            
+            job_id = f"bulk_delete_{int(time.time())}"
+            
+            # Create async job for large deletion
+            async_processor = AsyncProcessor()
+            await async_processor.create_job(
+                job_id=job_id,
+                job_type="bulk_delete",
+                parameters={
+                    "query": query,
+                    "max_emails": max_emails,
+                    "batch_size": batch_size
+                }
+            )
+            
+            # Start async processing
+            await async_processor.start_bulk_delete_job(job_id, g_client, query, max_emails, batch_size)
+            
+            return {
+                "success": True,
+                "data": {
+                    "job_id": job_id,
+                    "status": "processing",
+                    "status_message": f"Async bulk deletion started for query '{query}'. Use job_get_status to track progress."
+                }
+            }
+            
+        except ImportError:
+            logger.warning("Async processor not available, falling back to synchronous processing")
+            return await self._delete_by_query(g_client, query, max_emails, batch_size, use_async=False)
+
+    async def delete_emails_by_query_tool(
+        self,
+        query: str,
+        max_emails: int = 1000,
+        batch_size: int = 1000,
+        use_async: bool = True,
+        optimize_query: bool = True,
+        confirm_deletion: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Dedicated bulk delete tool optimized for query-based operations.
+        Designed for large-scale email management with safety features.
+        """
+        # Safety validation
+        if not confirm_deletion:
+            return {
+                "success": False,
+                "error_message": "confirm_deletion must be set to true for bulk deletion operations. This action is IRREVERSIBLE.",
+                "error_code": "CONFIRMATION_REQUIRED",
+                "data": {"deleted_count": 0, "status_message": "Deletion not confirmed."}
+            }
+        
+        logger.warning(f"Adapter: BULK DELETE BY QUERY '{query}' with confirmation. THIS IS IRREVERSIBLE.")
+        
+        try:
+            g_client = await self._ensure_g_service_client()
+            
+            # Apply query optimization if enabled
+            if optimize_query:
+                try:
+                    from damien_cli.utilities.query_optimizer import optimize_bulk_query
+                    optimized_queries = optimize_bulk_query(query, max_emails)
+                    
+                    if len(optimized_queries) > 1:
+                        logger.info(f"Query optimized into {len(optimized_queries)} targeted queries")
+                        return await self._delete_optimized_queries(g_client, optimized_queries, max_emails, batch_size, use_async)
+                except ImportError:
+                    logger.debug("Query optimizer not available, using original query")
+            
+            # Standard single query deletion
+            return await self._delete_by_query(g_client, query, max_emails, batch_size, use_async)
+            
+        except Exception as e:
+            logger.error(f"Error in delete_emails_by_query_tool: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error_message": f"Bulk deletion failed: {str(e)}",
+                "error_code": "BULK_DELETE_ERROR",
+                "data": {"deleted_count": 0, "status_message": str(e)}
+            }
+
+    async def _delete_optimized_queries(self, g_client, optimized_queries: List[str], max_emails: int, batch_size: int, use_async: bool) -> Dict[str, Any]:
+        """Handle deletion for multiple optimized queries."""
+        total_deleted = 0
+        emails_per_query = max(1, max_emails // len(optimized_queries))
+        
+        for i, opt_query in enumerate(optimized_queries):
+            logger.info(f"Processing optimized query {i+1}/{len(optimized_queries)}: {opt_query}")
+            
+            result = await self._delete_by_query(g_client, opt_query, emails_per_query, batch_size, use_async=False)
+            
+            if result.get("success", False):
+                query_deleted = result.get("data", {}).get("deleted_count", 0)
+                total_deleted += query_deleted
+                logger.info(f"Deleted {query_deleted} emails from optimized query {i+1}")
+            else:
+                logger.error(f"Failed to process optimized query {i+1}: {opt_query}")
+                return {
+                    "success": False,
+                    "error_message": f"Optimized query {i+1} failed after deleting {total_deleted} emails",
+                    "error_code": "OPTIMIZED_QUERY_FAILED",
+                    "data": {"deleted_count": total_deleted, "status_message": f"Partial deletion from {i} optimized queries"}
+                }
+            
+            # Stop if we've reached the max limit
+            if total_deleted >= max_emails:
+                break
+        
+        status_msg = f"Successfully deleted {total_deleted} emails using {len(optimized_queries)} optimized queries."
+        logger.info(status_msg)
+        return {
+            "success": True,
+            "data": {
+                "deleted_count": total_deleted,
+                "status_message": status_msg,
+                "optimization_used": True,
+                "queries_processed": len(optimized_queries)
+            }
+        }
 
     async def list_labels_tool(self) -> Dict[str, Any]:
         """List all Gmail labels for the authenticated user.

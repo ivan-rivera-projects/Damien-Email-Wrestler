@@ -16,11 +16,9 @@ logger = logging.getLogger(__name__)
 # Global label cache
 _label_name_to_id_cache = {}
 
-# Gmail API Scopes
+# Gmail API Scopes - Include specific settings scopes
 GMAIL_SCOPES = [
-    'https://www.googleapis.com/auth/gmail.readonly',
-    'https://www.googleapis.com/auth/gmail.modify',
-    'https://www.googleapis.com/auth/gmail.compose',
+    'https://mail.google.com/',
     'https://www.googleapis.com/auth/gmail.settings.basic',
     'https://www.googleapis.com/auth/gmail.settings.sharing'
 ]
@@ -519,13 +517,46 @@ def batch_trash_messages(gmail_service, message_ids: List[str]) -> Dict[str, Any
         
         logger.debug(f"Batch trashing {len(message_ids)} messages")
         
-        gmail_service.users().messages().batchModify(
-            userId='me',
-            body={
-                'ids': message_ids,
-                'addLabelIds': ['TRASH']
-            }
-        ).execute()
+        # For small batches, use individual trash() calls which are more reliable
+        if len(message_ids) <= 10:
+            logger.debug("Using individual trash() calls for small batch")
+            for message_id in message_ids:
+                gmail_service.users().messages().trash(
+                    userId='me',
+                    id=message_id
+                ).execute()
+        else:
+            # For larger batches, use batchModify but also remove from INBOX
+            logger.debug("Using batchModify for large batch")
+            gmail_service.users().messages().batchModify(
+                userId='me',
+                body={
+                    'ids': message_ids,
+                    'addLabelIds': ['TRASH'],
+                    'removeLabelIds': ['INBOX']  # This is crucial for proper trashing
+                }
+            ).execute()
+        
+        # Verify that emails are actually in trash for small batches
+        if len(message_ids) <= 5:
+            logger.debug("Verifying trash operation for small batch")
+            verification_failed = []
+            for message_id in message_ids:
+                try:
+                    msg = gmail_service.users().messages().get(
+                        userId='me', 
+                        id=message_id, 
+                        format='minimal'
+                    ).execute()
+                    labels = msg.get('labelIds', [])
+                    if 'TRASH' not in labels:
+                        verification_failed.append(message_id)
+                except Exception as e:
+                    logger.warning(f"Could not verify trash status for message {message_id}: {e}")
+            
+            if verification_failed:
+                logger.error(f"Verification failed for {len(verification_failed)} messages: {verification_failed}")
+                raise GmailApiError(f"Trash operation succeeded but verification failed for {len(verification_failed)} messages")
         
         logger.info(f"Successfully trashed {len(message_ids)} messages")
         

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict, field_validator, validator, ValidationInfo
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator, validator, ValidationInfo
 from typing import List, Optional, Dict, Any, Literal
 
 from .mcp_protocol import MCPToolCallInput # Base class for tool inputs
@@ -270,11 +270,26 @@ class MarkEmailsParams(MCPToolCallInput):
         return v
 
 class DeleteEmailsPermanentlyParams(MCPToolCallInput):
-    """Parameters for permanently deleting emails. (Placeholder)"""
-    message_ids: List[str] = Field(..., description="List of message IDs to permanently delete.")
+    """Parameters for permanently deleting emails. Supports both message IDs and query-based deletion."""
+    message_ids: Optional[List[str]] = Field(None, description="List of message IDs to permanently delete.")
+    query: Optional[str] = Field(None, description="Gmail query string to find emails to delete (e.g., 'label:spam', 'from:example.com')")
+    max_emails: int = Field(default=1000, description="Maximum number of emails to delete when using query (safety limit)")
+    batch_size: int = Field(default=1000, description="Batch size for deletion operations (max 1000 per Gmail API)")
+    use_async: bool = Field(default=False, description="For large operations (500+ emails), use async processing with job tracking")
+
+    @model_validator(mode='after')
+    def validate_deletion_params(self):
+        """Ensure either message_ids or query is provided, but not both."""
+        if not self.message_ids and not self.query:
+            raise ValueError("Either 'message_ids' or 'query' must be provided for deletion.")
+        if self.message_ids and self.query:
+            raise ValueError("Cannot specify both 'message_ids' and 'query'. Choose one deletion method.")
+        return self
 
     @field_validator('message_ids', mode='before')
     def parse_message_ids_list(cls, v):
+        if v is None:
+            return v
         if isinstance(v, str):
             try:
                 import json
@@ -288,6 +303,47 @@ class DeleteEmailsPermanentlyParams(MCPToolCallInput):
         elif not isinstance(v, list) or not all(isinstance(item, str) for item in v):
             raise ValueError("message_ids must be a list of strings or a JSON string array.")
         return v
+
+    @field_validator('max_emails')
+    def validate_max_emails(cls, v):
+        if v < 1 or v > 10000:
+            raise ValueError("max_emails must be between 1 and 10000.")
+        return v
+
+    @field_validator('batch_size')
+    def validate_batch_size(cls, v):
+        if v < 1 or v > 1000:
+            raise ValueError("batch_size must be between 1 and 1000 (Gmail API limit).")
+        return v
+
+
+class DeleteEmailsByQueryParams(MCPToolCallInput):
+    """Parameters for bulk deleting emails by Gmail query (optimized for large operations)."""
+    query: str = Field(..., description="Gmail query string to find emails to delete (e.g., 'label:spam', 'from:example.com')")
+    max_emails: int = Field(default=1000, description="Maximum number of emails to delete (safety limit)")
+    batch_size: int = Field(default=1000, description="Batch size for deletion operations (max 1000 per Gmail API)")
+    use_async: bool = Field(default=True, description="Use async processing with job tracking for better performance")
+    optimize_query: bool = Field(default=True, description="Apply query optimization for better performance")
+    confirm_deletion: bool = Field(default=False, description="Required confirmation flag for bulk deletion operations")
+
+    @field_validator('max_emails')
+    def validate_max_emails(cls, v):
+        if v < 1 or v > 10000:
+            raise ValueError("max_emails must be between 1 and 10000.")
+        return v
+
+    @field_validator('batch_size')
+    def validate_batch_size(cls, v):
+        if v < 1 or v > 1000:
+            raise ValueError("batch_size must be between 1 and 1000 (Gmail API limit).")
+        return v
+
+    @model_validator(mode='after')
+    def validate_confirmation(self):
+        """Require confirmation for bulk operations."""
+        if not self.confirm_deletion:
+            raise ValueError("confirm_deletion must be set to true for bulk deletion operations. This action is IRREVERSIBLE.")
+        return self
 
 # --- Rules Tool Models (Actual definitions might be more complex) ---
 

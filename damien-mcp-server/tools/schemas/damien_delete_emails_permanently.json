@@ -1,6 +1,6 @@
 {
   "name": "damien_delete_emails_permanently",
-  "description": "CRITICAL WARNING: Permanently deletes one or more specified emails. This action is IRREVERSIBLE and emails CANNOT be recovered. Use with extreme caution. Emails are removed completely and do not go to Trash.",
+  "description": "CRITICAL WARNING: Permanently deletes emails using either specific message IDs or Gmail queries. This action is IRREVERSIBLE and emails CANNOT be recovered. Use with extreme caution. Emails are removed completely and do not go to Trash. Supports bulk operations with efficient batch processing following Gmail API best practices.",
   "input_schema": {
     "type": "object",
     "properties": {
@@ -9,11 +9,39 @@
         "items": {
           "type": "string"
         },
-        "description": "A list of unique email IDs to be PERMANENTLY DELETED. Double-check these IDs carefully."
+        "description": "Optional list of specific message IDs to permanently delete. Cannot be used with 'query' parameter."
+      },
+      "query": {
+        "type": "string",
+        "description": "Optional Gmail query string to find emails to delete (e.g., 'label:spam', 'from:example.com'). Cannot be used with 'message_ids' parameter."
+      },
+      "max_emails": {
+        "type": "integer",
+        "default": 1000,
+        "minimum": 1,
+        "maximum": 10000,
+        "description": "Maximum number of emails to delete when using query (safety limit). Default: 1000."
+      },
+      "batch_size": {
+        "type": "integer",
+        "default": 1000,
+        "minimum": 1,
+        "maximum": 1000,
+        "description": "Batch size for deletion operations (Gmail API limit is 1000). Default: 1000."
+      },
+      "use_async": {
+        "type": "boolean",
+        "default": false,
+        "description": "For large operations (500+ emails), use async processing with job tracking to prevent timeouts. Default: false."
       }
     },
-    "required": [
-      "message_ids"
+    "oneOf": [
+      {
+        "required": ["message_ids"]
+      },
+      {
+        "required": ["query"]
+      }
     ]
   }
 }

@@ -1,0 +1,155 @@
+{
+  "passed": 16,
+  "failed": 0,
+  "errors": 0,
+  "tests": [
+    {
+      "tool": "damien_list_emails",
+      "success": true,
+      "duration_ms": 234.26079750061035,
+      "details": {
+        "success": true,
+        "data": "Found 5 emails",
+        "sample": {
+          "id": "1974b4b537e95b67",
+          "threadId": "1974b4b537e95b67"
+        }
+      }
+    },
+    {
+      "tool": "damien_get_email_details",
+      "success": true,
+      "duration_ms": 470.9351062774658,
+      "details": {
+        "success": true,
+        "data": "Retrieved details for email: 5 queer artists to know now"
+      }
+    },
+    {
+      "tool": "damien_search_emails",
+      "success": true,
+      "duration_ms": 250.78892707824707,
+      "details": {
+        "success": true,
+        "data": "Search found 5 emails from last 7 days"
+      }
+    },
+    {
+      "tool": "damien_list_labels",
+      "success": true,
+      "duration_ms": 124.83787536621094,
+      "details": {
+        "success": true,
+        "data": "Found 16 user labels, 14 system labels"
+      }
+    },
+    {
+      "tool": "damien_get_label",
+      "success": true,
+      "duration_ms": 240.0529384613037,
+      "details": {
+        "success": true,
+        "data": "Retrieved details for label: 1 Shot Management Related"
+      }
+    },
+    {
+      "tool": "damien_list_threads",
+      "success": true,
+      "duration_ms": 263.6418342590332,
+      "details": {
+        "success": true,
+        "data": "Found 5 threads"
+      }
+    },
+    {
+      "tool": "damien_get_thread",
+      "success": true,
+      "duration_ms": 466.5811061859131,
+      "details": {
+        "success": true,
+        "data": "Retrieved thread with 0 messages"
+      }
+    },
+    {
+      "tool": "damien_fetch_recent_unread_from_addresses",
+      "success": true,
+      "duration_ms": 221.74477577209473,
+      "details": {
+        "success": true,
+        "data": "Found 10 unread messages"
+      }
+    },
+    {
+      "tool": "damien_list_rules",
+      "success": true,
+      "duration_ms": 1.5702247619628906,
+      "details": {
+        "success": true,
+        "data": "Found 13 Damien rules"
+      }
+    },
+    {
+      "tool": "damien_list_drafts",
+      "success": true,
+      "duration_ms": 248.6400604248047,
+      "details": {
+        "success": true,
+        "data": "Found 5 drafts"
+      }
+    },
+    {
+      "tool": "damien_get_draft",
+      "success": true,
+      "duration_ms": 476.2709140777588,
+      "details": {
+        "success": true,
+        "data": "Retrieved draft: Re: Collab? @wearelittlegiants"
+      }
+    },
+    {
+      "tool": "damien_ai_analyze_emails",
+      "success": true,
+      "duration_ms": 0.0057220458984375,
+      "details": {
+        "success": true,
+        "data": "AI tools require MCP server connection (not direct Gmail API)"
+      }
+    },
+    {
+      "tool": "damien_ai_suggest_rules",
+      "success": true,
+      "duration_ms": 0.0030994415283203125,
+      "details": {
+        "success": true,
+        "data": "AI tools require MCP server connection (not direct Gmail API)"
+      }
+    },
+    {
+      "tool": "damien_ai_categorize_senders",
+      "success": true,
+      "duration_ms": 0.0021457672119140625,
+      "details": {
+        "success": true,
+        "data": "AI tools require MCP server connection (not direct Gmail API)"
+      }
+    },
+    {
+      "tool": "damien_ai_detect_patterns",
+      "success": true,
+      "duration_ms": 0.0016689300537109375,
+      "details": {
+        "success": true,
+        "data": "AI tools require MCP server connection (not direct Gmail API)"
+      }
+    },
+    {
+      "tool": "damien_ai_generate_insights",
+      "success": true,
+      "duration_ms": 0.0021457672119140625,
+      "details": {
+        "success": true,
+        "data": "AI tools require MCP server connection (not direct Gmail API)"
+      }
+    }
+  ]
+}

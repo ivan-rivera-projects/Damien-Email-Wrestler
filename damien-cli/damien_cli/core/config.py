@@ -13,8 +13,12 @@ RULES_FILE = DATA_DIR / "rules.json"
 # Make sure DATA_DIR exists
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# Gmail API Scopes
-SCOPES = ["https://mail.google.com/"]
+# Gmail API Scopes - Include settings scopes
+SCOPES = [
+    "https://mail.google.com/",
+    "https://www.googleapis.com/auth/gmail.settings.basic",
+    "https://www.googleapis.com/auth/gmail.settings.sharing"
+]
 
 # Load environment variables from root .env file
 ROOT_DOTENV_PATH = PROJECT_ROOT / ".env"

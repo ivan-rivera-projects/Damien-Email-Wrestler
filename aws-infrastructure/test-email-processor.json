@@ -1,0 +1,27 @@
+{
+  "user_id": "test_user",
+  "email_data": {
+    "id": "test_email_123",
+    "threadId": "thread_456", 
+    "internalDate": "1701234567000",
+    "labelIds": ["INBOX", "UNREAD"],
+    "payload": {
+      "headers": [
+        {"name": "Subject", "value": "Test Email Subject"},
+        {"name": "From", "value": "Test Sender <sender@example.com>"},
+        {"name": "Date", "value": "2024-01-15T10:30:00Z"},
+        {"name": "Message-ID", "value": "<test123@example.com>"}
+      ],
+      "mimeType": "text/html",
+      "body": {
+        "size": 1500
+      },
+      "parts": [
+        {
+          "mimeType": "text/html",
+          "body": {"size": 1200}
+        }
+      ]
+    }
+  }
+}
