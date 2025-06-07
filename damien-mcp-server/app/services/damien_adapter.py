@@ -34,6 +34,7 @@ from damien_cli.features.rule_management.models import RuleModel
 from ..models.tools import ApplyRulesParams # Changed from ..models.mcp
 from pydantic import ValidationError
 from ..core.config import settings # For accessing paths for Gmail client
+from .aws_lambda_client import LambdaClient # AWS Lambda integration
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -80,6 +81,14 @@ class DamienAdapter:
         self.damien_gmail_module = damien_gmail_module
         self.damien_rules_module = damien_rules_module
         self.damien_gmail_integration_module = damien_gmail_integration_module
+        
+        # Initialize AWS Lambda client for AI processing
+        try:
+            self.lambda_client = LambdaClient()
+            logger.info("AWS Lambda client initialized successfully")
+        except Exception as e:
+            logger.warning(f"Failed to initialize AWS Lambda client: {e}")
+            self.lambda_client = None
 
     async def _ensure_g_service_client(self) -> Any:
         """Ensures the Gmail service client is initialized and returns it.

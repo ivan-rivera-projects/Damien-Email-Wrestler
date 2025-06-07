@@ -1,0 +1,25 @@
+1.95
+{
+  "total_emails_analyzed": 5,
+  "patterns_identified": 1,
+  "emails_with_patterns": 4,
+  "pattern_coverage_percentage": 80.0,
+  "automation_opportunities": [
+    {
+      "type": "auto_archive",
+      "pattern": "newsletter_subscriptions",
+      "potential_savings": "4 minutes/week",
+      "confidence": 0.92,
+      "priority": "medium",
+      "description": "Auto-archive 4 newsletter emails"
+    }
+  ],
+  "estimated_time_savings_hours": 0.05,
+  "pattern_distribution": {
+    "newsletter_subscriptions": 100.0
+  },
+  "reliability_score": 0.68,
+  "recommendations": [
+    "Analyze more emails to identify automation opportunities"
+  ]
+}

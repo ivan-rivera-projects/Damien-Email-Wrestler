@@ -23,6 +23,7 @@ import json
 from ..services.cli_bridge import CLIBridge
 from ..services.async_processor import AsyncTaskProcessor
 from ..core.progress_tracker import ProgressTracker
+from ..services.aws_lambda_client import LambdaClient
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,14 @@ class AIIntelligenceTools:
             self.cli_bridge = CLIBridge()
             self.async_processor = AsyncTaskProcessor()
             self.progress_tracker = ProgressTracker()
+            
+            # Initialize AWS Lambda client for enhanced AI processing
+            try:
+                self.lambda_client = LambdaClient()
+                logger.info("✅ AWS Lambda client initialized for AI processing")
+            except Exception as e:
+                logger.warning(f"⚠️  AWS Lambda client not available: {e}")
+                self.lambda_client = None
             
             logger.info("✅ AI Intelligence MCP tools initialized successfully")
             
@@ -102,6 +111,23 @@ class AIIntelligenceTools:
                 min_confidence=min_confidence
             )
             self.progress_tracker.advance_step(operation.operation_id, "Pattern analysis completed")
+            
+            # Step 2.5: Enhanced AI processing with AWS Lambda (if available)
+            if self.lambda_client:
+                self.progress_tracker.update_progress(operation.operation_id, message="Running enhanced AI analysis...")
+                try:
+                    lambda_results = await self._process_emails_with_lambda(
+                        emails_result.get("emails", []),
+                        min_confidence
+                    )
+                    if lambda_results.get("success"):
+                        # Merge Lambda insights with existing analysis
+                        analysis_result = self._merge_lambda_analysis(analysis_result, lambda_results)
+                        logger.info(f"✅ Enhanced AI analysis completed with {lambda_results.get('emails_processed', 0)} emails")
+                except Exception as e:
+                    logger.warning(f"⚠️  Enhanced AI analysis failed, using standard analysis: {e}")
+            else:
+                logger.info("ℹ️  Using standard analysis (AWS Lambda not available)")
             
             # Step 3: Generate business insights
             self.progress_tracker.update_progress(operation.operation_id, message="Generating business insights...")
@@ -906,8 +932,116 @@ class AIIntelligenceTools:
             recommendations.append("⚠️ Analysis Quality: Moderate - consider larger sample for critical decisions")
         
         return recommendations
-
-
+    
+    async def _process_emails_with_lambda(self, emails: List[Dict], min_confidence: float) -> Dict[str, Any]:
+        """Process emails using AWS Lambda for enhanced AI analysis.
+        
+        Args:
+            emails: List of email data from Gmail
+            min_confidence: Minimum confidence threshold
+            
+        Returns:
+            Lambda processing results with enhanced AI insights
+        """
+        if not self.lambda_client:
+            return {"success": False, "error": "Lambda client not available"}
+        
+        try:
+            lambda_results = []
+            processed_count = 0
+            
+            # Process emails in batches (simulate processing sample emails)
+            sample_emails = emails[:min(10, len(emails))]  # Process up to 10 emails for demo
+            
+            for email in sample_emails:
+                try:
+                    # Use Lambda AI pipeline
+                    result = self.lambda_client.process_email_with_ai(
+                        user_id="damien_user",  # Default user ID
+                        email_data=email
+                    )
+                    
+                    if result.get("success"):
+                        lambda_results.append({
+                            "email_id": result.get("email_id"),
+                            "analysis": result.get("analysis_result", {}).get("body", {}),
+                            "confidence": result.get("analysis_result", {}).get("body", {}).get("analysis_confidence", 0)
+                        })
+                        processed_count += 1
+                        
+                except Exception as e:
+                    logger.warning(f"Failed to process email {email.get('id', 'unknown')} with Lambda: {e}")
+                    continue
+            
+            return {
+                "success": True,
+                "emails_processed": processed_count,
+                "lambda_results": lambda_results,
+                "total_emails": len(emails),
+                "processing_method": "aws_lambda_enhanced"
+            }
+            
+        except Exception as e:
+            logger.error(f"Lambda email processing failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "emails_processed": 0
+            }
+    
+    def _merge_lambda_analysis(self, standard_analysis: Dict, lambda_results: Dict) -> Dict:
+        """Merge Lambda AI analysis results with standard analysis.
+        
+        Args:
+            standard_analysis: Results from standard CLI analysis
+            lambda_results: Results from Lambda AI processing
+            
+        Returns:
+            Enhanced analysis combining both approaches
+        """
+        try:
+            enhanced_analysis = standard_analysis.copy()
+            
+            if lambda_results.get("success") and lambda_results.get("lambda_results"):
+                # Add Lambda insights
+                lambda_insights = {
+                    "enhanced_ai_analysis": True,
+                    "lambda_processed_emails": lambda_results.get("emails_processed", 0),
+                    "average_confidence": sum(r.get("confidence", 0) for r in lambda_results["lambda_results"]) / len(lambda_results["lambda_results"]) if lambda_results["lambda_results"] else 0,
+                    "high_confidence_classifications": len([r for r in lambda_results["lambda_results"] if r.get("confidence", 0) >= 0.85]),
+                    "processing_method": "hybrid_cli_lambda"
+                }
+                
+                # Merge insights
+                if "insights" not in enhanced_analysis:
+                    enhanced_analysis["insights"] = {}
+                
+                enhanced_analysis["insights"]["lambda_enhancement"] = lambda_insights
+                
+                # Add Lambda patterns to existing patterns
+                lambda_patterns = []
+                for result in lambda_results["lambda_results"]:
+                    analysis = result.get("analysis", {})
+                    if analysis.get("analysis_confidence", 0) >= 0.85:
+                        lambda_patterns.append({
+                            "type": "lambda_ai_classification",
+                            "confidence": analysis.get("analysis_confidence", 0),
+                            "description": f"High-confidence AI classification from Lambda analysis",
+                            "email_id": result.get("email_id")
+                        })
+                
+                if "patterns" not in enhanced_analysis:
+                    enhanced_analysis["patterns"] = []
+                
+                enhanced_analysis["patterns"].extend(lambda_patterns)
+                
+                logger.info(f"✅ Merged Lambda analysis: {len(lambda_patterns)} high-confidence patterns added")
+            
+            return enhanced_analysis
+            
+        except Exception as e:
+            logger.error(f"Failed to merge Lambda analysis: {e}")
+            return standard_analysis
 
 
 # Export the tools class for MCP server integration
