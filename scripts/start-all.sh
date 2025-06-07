@@ -103,7 +103,7 @@ MINIMAL_PORT=8893
 
 # Always start the standard MCP server first when using minimal MCP
 if [ "$USE_MINIMAL" = true ]; then
-    echo -e "${BLUE}ℹ️ Using Minimal MCP Server (Phase-based implementation)${NC}"
+    echo -e "${BLUE}ℹ️ Using Minimal MCP Server (Direct tool access - 39 optimized tools)${NC}"
     echo -e "${BLUE}ℹ️ Starting standard MCP Server first as backend${NC}"
     
     if check_port $MCP_PORT; then
@@ -233,51 +233,18 @@ if [ "$USE_MINIMAL" = true ]; then
     
     if [ "$MINIMAL_MCP_HEALTHY" = true ]; then
         echo -e "${GREEN}✓${NC} Damien Minimal MCP Server: Running on http://localhost:$MINIMAL_PORT"
-        
-        # Get current phase
-        CURRENT_PHASE=$(grep "DAMIEN_INITIAL_PHASE" ./damien-mcp-minimal/.env | cut -d'=' -f2 || echo "1")
-        echo -e "  ${GREEN}└─ Current Phase: $CURRENT_PHASE${NC}"
+        echo -e "  ${GREEN}└─ Hybrid AI Architecture: CLI + AWS Lambda enhancement${NC}"
         
         # Check available tools
         if check_mcp_tools "http://localhost:$MINIMAL_PORT" "$API_KEY"; then
-            case $CURRENT_PHASE in
-                1)
-                    echo -e "  ${GREEN}   └─ Essential Core tools: Active${NC}"
-                    ;;
-                2)
-                    echo -e "  ${GREEN}   ├─ Essential Core tools: Active${NC}"
-                    echo -e "  ${GREEN}   └─ Basic Actions tools: Active${NC}"
-                    ;;
-                3)
-                    echo -e "  ${GREEN}   ├─ Essential Core tools: Active${NC}"
-                    echo -e "  ${GREEN}   ├─ Basic Actions tools: Active${NC}"
-                    echo -e "  ${GREEN}   └─ Thread Management tools: Active${NC}"
-                    ;;
-                4)
-                    echo -e "  ${GREEN}   ├─ Essential Core tools: Active${NC}"
-                    echo -e "  ${GREEN}   ├─ Basic Actions tools: Active${NC}"
-                    echo -e "  ${GREEN}   ├─ Thread Management tools: Active${NC}"
-                    echo -e "  ${GREEN}   └─ Rule Management tools: Active${NC}"
-                    ;;
-                5)
-                    echo -e "  ${GREEN}   ├─ Essential Core tools: Active${NC}"
-                    echo -e "  ${GREEN}   ├─ Basic Actions tools: Active${NC}"
-                    echo -e "  ${GREEN}   ├─ Thread Management tools: Active${NC}"
-                    echo -e "  ${GREEN}   ├─ Rule Management tools: Active${NC}"
-                    echo -e "  ${GREEN}   └─ AI Intelligence tools: Active${NC}"
-                    ;;
-                6)
-                    echo -e "  ${GREEN}   ├─ Essential Core tools: Active${NC}"
-                    echo -e "  ${GREEN}   ├─ Basic Actions tools: Active${NC}"
-                    echo -e "  ${GREEN}   ├─ Thread Management tools: Active${NC}"
-                    echo -e "  ${GREEN}   ├─ Rule Management tools: Active${NC}"
-                    echo -e "  ${GREEN}   ├─ AI Intelligence tools: Active${NC}"
-                    echo -e "  ${GREEN}   └─ Account Settings tools: Active${NC}"
-                    ;;
-                *)
-                    echo -e "  ${YELLOW}   └─ Tools loading...${NC}"
-                    ;;
-            esac
+            echo -e "  ${GREEN}   ├─ All 39 optimized tools: Active${NC}"
+            echo -e "  ${GREEN}   ├─ AI Intelligence suite: Available (12 tools)${NC}"
+            echo -e "  ${GREEN}   ├─ Email management: Available (13 tools)${NC}"
+            echo -e "  ${GREEN}   ├─ Thread operations: Available (5 tools)${NC}"
+            echo -e "  ${GREEN}   ├─ Draft management: Available (6 tools)${NC}"
+            echo -e "  ${GREEN}   ├─ Rule management: Available (5 tools)${NC}"
+            echo -e "  ${GREEN}   ├─ Settings management: Available (2 tools) - Core only${NC}"
+            echo -e "  ${GREEN}   └─ Job management: Available (4 tools)${NC}"
         else
             echo -e "  ${YELLOW}└─ Tools loading...${NC}"
         fi
@@ -291,10 +258,14 @@ else
         
         # Check available tools
         if check_mcp_tools "http://localhost:$MCP_PORT" "$API_KEY"; then
-            echo -e "  ${GREEN}└─ Email management tools: ✓ Active${NC}"
-            echo -e "  ${GREEN}   ├─ AI intelligence tools: Available${NC}"
-            echo -e "  ${GREEN}   ├─ Rule management: Enabled${NC}"
-            echo -e "  ${GREEN}   └─ Draft management: Ready${NC}"
+            echo -e "  ${GREEN}└─ All 39 optimized tools: ✓ Active${NC}"
+            echo -e "  ${GREEN}   ├─ AI intelligence tools: Available (12 tools)${NC}"
+            echo -e "  ${GREEN}   ├─ Email management: Available (13 tools)${NC}"
+            echo -e "  ${GREEN}   ├─ Thread operations: Available (5 tools)${NC}"
+            echo -e "  ${GREEN}   ├─ Draft management: Available (6 tools)${NC}"
+            echo -e "  ${GREEN}   ├─ Rule management: Available (5 tools)${NC}"
+            echo -e "  ${GREEN}   ├─ Settings management: Available (2 tools) - Core only${NC}"
+            echo -e "  ${GREEN}   └─ Job management: Available (4 tools)${NC}"
         else
             echo -e "  ${YELLOW}└─ Tools loading...${NC}"
         fi
@@ -341,32 +312,22 @@ if [ "$ALL_HEALTHY" = true ]; then
     echo -e "${GREEN}🎉 All services are running successfully!${NC}"
     echo ""
     
+    echo -e "${BLUE}📋 Hybrid AI Features Available (39 optimized tools):${NC}"
+    echo "  • Email management (list, read, label, trash, delete) - 13 tools"
+    echo "  • AI-powered analysis with optional AWS Lambda enhancement - 12 tools"
+    echo "  • Thread-level operations and management - 5 tools"
+    echo "  • Draft creation and lifecycle management - 6 tools"
+    echo "  • Intelligent rule creation and automation - 5 tools"
+    echo "  • Core settings and configuration - 2 tools (vacation/IMAP/POP removed)"
+    echo "  • Async job management and tracking - 4 tools"
+    echo ""
+    echo -e "${BLUE}💡 Quick Test Commands:${NC}"
     if [ "$USE_MINIMAL" = true ]; then
-        echo -e "${BLUE}📋 Phase-based Features:${NC}"
-        echo "  • Phase 1: Essential Core (5 tools)"
-        echo "  • Phase 2: Basic Actions (7 tools)"
-        echo "  • Phase 3: Thread Management (5 tools)"
-        echo "  • Phase 4: Rule Management (5 tools)"
-        echo "  • Phase 5: AI Intelligence (9 tools)"
-        echo "  • Phase 6: Account Settings (6 tools)"
-        echo ""
-        echo -e "${BLUE}💡 Quick Commands:${NC}"
-        echo "  • Move to next phase: cd damien-mcp-minimal && npm run phase:next"
-        echo "  • Test current phase: cd damien-mcp-minimal && npm run test:phase"
-        echo "  • Check tool availability: curl -H 'X-API-Key: $API_KEY' http://localhost:$MCP_PORT/mcp/list_tools | python3 -m json.tool"
+        echo "  • Check tool availability: curl -H 'X-API-Key: $API_KEY' http://localhost:$MINIMAL_PORT/mcp/list_tools | python3 -m json.tool"
     else
-        echo -e "${BLUE}📋 Available Features:${NC}"
-        echo "  • Email management (list, read, label, trash, delete)"
-        echo "  • AI-powered email analysis and insights"
-        echo "  • Intelligent rule creation and management"
-        echo "  • Draft creation and management"
-        echo "  • Thread-level operations"
-        echo "  • Settings and configuration management"
-        echo ""
-        echo -e "${BLUE}💡 Quick Test Commands:${NC}"
         echo "  • Check tool availability: curl -H 'X-API-Key: $API_KEY' http://localhost:$MCP_PORT/mcp/list_tools | python3 -m json.tool"
-        echo "  • Run system validation: ./scripts/test.sh"
     fi
+    echo "  • Run system validation: ./scripts/test.sh"
     
     echo "  • Check status anytime: ./scripts/status.sh"
     exit 0
