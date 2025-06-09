@@ -190,7 +190,7 @@ async def _handle_async_trash(query: str, max_results: int, dry_run: bool) -> Di
                 "query": query,
                 "max_results": max_results,
                 "dry_run": dry_run,
-                "task_id": None  # Will be set by processor
+                "task_id": None  # Will be set by processor automatically
             }
         )
         

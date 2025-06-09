@@ -77,11 +77,15 @@ class AsyncTaskProcessor:
             task.status = TaskStatus.RUNNING
             task.start_time = datetime.now()
             
+            # Inject task_id into parameters for progress tracking
+            task_parameters = task.parameters.copy()
+            task_parameters["task_id"] = task.task_id
+            
             # Execute the processor function
             if asyncio.iscoroutinefunction(task.processor_func):
-                task.result = await task.processor_func(task.parameters)
+                task.result = await task.processor_func(task_parameters)
             else:
-                task.result = task.processor_func(task.parameters)
+                task.result = task.processor_func(task_parameters)
             
             task.status = TaskStatus.COMPLETED
             task.progress = 100.0
@@ -130,6 +134,26 @@ class AsyncTaskProcessor:
         """List all active tasks."""
         return [self.get_task_status(task_id) for task_id in self.active_tasks.keys()]
     
+    async def update_task_progress(self, task_id: str, progress: float, message: str = "") -> bool:
+        """Update progress of an active task."""
+        if task_id in self.active_tasks:
+            task = self.active_tasks[task_id]
+            task.progress = min(100.0, max(0.0, progress))  # Clamp between 0-100
+            if message:
+                task.message = message
+            logger.debug(f"Task {task_id} progress: {task.progress:.1f}% - {message}")
+            return True
+        else:
+            logger.warning(f"Attempted to update progress for non-existent task: {task_id}")
+            return False
+    
+    def get_task_result(self, task_id: str) -> Optional[Any]:
+        """Get the result of a completed task."""
+        task = self.completed_tasks.get(task_id)
+        if task and task.status == TaskStatus.COMPLETED:
+            return task.result
+        return None
+    
     def cancel_task(self, task_id: str) -> bool:
         """Cancel an active task."""
         if task_id in self.active_tasks:
@@ -146,3 +170,19 @@ class AsyncTaskProcessor:
             return True
         
         return False
+    
+    def cleanup_old_tasks(self, max_age_hours: int = 24):
+        """Clean up old completed tasks."""
+        from datetime import timedelta
+        cutoff_time = datetime.now() - timedelta(hours=max_age_hours)
+        
+        old_task_ids = [
+            task_id for task_id, task in self.completed_tasks.items()
+            if task.end_time and task.end_time < cutoff_time
+        ]
+        
+        for task_id in old_task_ids:
+            del self.completed_tasks[task_id]
+        
+        if old_task_ids:
+            logger.info(f"Cleaned up {len(old_task_ids)} old completed tasks")
