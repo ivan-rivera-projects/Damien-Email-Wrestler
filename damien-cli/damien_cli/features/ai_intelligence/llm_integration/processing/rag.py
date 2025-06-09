@@ -555,6 +555,7 @@ class RAGEngine:
         
         limit = limit or self.config.max_results
         start_time = time.time()
+        current_threshold = self.config.similarity_threshold  # Initialize with default threshold
         
         try:
             logger.debug(f"Starting {search_type.value} search for query: '{query[:50]}...' with limit: {limit}")

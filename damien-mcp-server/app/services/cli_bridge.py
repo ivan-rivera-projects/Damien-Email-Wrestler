@@ -208,8 +208,12 @@ class ComponentManager:
         try:
             self.health_status["batch_processor"] = ComponentStatus.INITIALIZING
             
+            # Import BatchConfig to set the processing strategy
+            from damien_cli.features.ai_intelligence.llm_integration.processing.batch import BatchConfig
+            
+            config = BatchConfig(processing_strategy=ProcessingStrategy.ADAPTIVE)
             processor = BatchProcessor(
-                default_strategy=ProcessingStrategy.ADAPTIVE,
+                config=config,
                 privacy_guardian=self.components.get("privacy_guardian")
             )
             

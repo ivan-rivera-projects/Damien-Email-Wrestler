@@ -411,7 +411,9 @@ async def execute_tool_endpoint(
                            "damien_ai_create_rule", "damien_ai_get_insights", "damien_ai_optimize_inbox",
                            # Async job tools added here 
                            "damien_ai_analyze_emails_async", "damien_job_get_status", "damien_job_get_result",
-                           "damien_job_cancel", "damien_job_list"]:
+                           "damien_job_cancel", "damien_job_list",
+                           # Enhanced trash tools added here
+                           "damien_trash_emails_by_query", "damien_smart_trash_marketing"]:
             try:
                 # Import tool registry to get the handler
                 from ..services.tool_registry import tool_registry

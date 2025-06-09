@@ -139,6 +139,19 @@ class PrivacyGuardian:
                 # For STRICT, additional anonymization might occur here or later.
         return sanitized_content, token_map, detected_pii
 
+    def detect_pii(self, text: str, min_confidence: float = 0.0) -> List[PIIEntity]:
+        """
+        Detect PII in the given text using the internal PII detector.
+        
+        Args:
+            text (str): The text to scan for PII.
+            min_confidence (float): Minimum confidence threshold for detections.
+            
+        Returns:
+            List[PIIEntity]: List of detected PII entities.
+        """
+        return self.pii_detector.detect(text, min_confidence=min_confidence)
+
     async def protect_email(
         self,
         email_data: Dict[str, Any], # e.g., {"id": "123", "subject": "...", "body": "...", "sender": "..."}

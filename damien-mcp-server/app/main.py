@@ -40,6 +40,7 @@ from .tools.settings_tools import register_settings_tools
 from .tools.thread_tools import register_thread_tools
 from .tools.register_ai_intelligence import register_ai_intelligence_tools
 from .tools.async_tools import register_async_tools
+from .tools.enhanced_trash_tool import register_enhanced_trash_tools
 from .services.tool_registry import tool_registry
 
 @app.on_event("startup")
@@ -59,10 +60,12 @@ async def startup_event():
         logger.error(f"❌ AI Intelligence tools registration failed: {e}", exc_info=True)
     
     register_async_tools()  # 🔥 Background Job Processing Tools
+    register_enhanced_trash_tools()  # 🗑️ Enhanced Trash Operations
     
     logger.info(f"🎉 MCP Server started with {len(tool_registry.get_all_tools())} tools registered")
     logger.info("✅ Phase 4 AI Intelligence integration complete!")
     logger.info("🚀 Background job processing system active!")
+    logger.info("🗑️ Enhanced trash operations available!")
 
 
 @app.get("/health", summary="Health Check", tags=["System"])
