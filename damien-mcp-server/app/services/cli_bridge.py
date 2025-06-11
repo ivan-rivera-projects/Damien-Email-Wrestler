@@ -17,12 +17,15 @@ import asyncio
 import logging
 import sys
 import time
+import hashlib
+import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Protocol, Union
 from dataclasses import dataclass
 from enum import Enum
 import tempfile
 import os
+from datetime import datetime, timezone, timedelta
 from contextlib import asynccontextmanager
 
 # Add CLI module to Python path for imports
@@ -49,6 +52,116 @@ class PerformanceMetrics:
     success: bool
     error_details: Optional[str] = None
     throughput: Optional[float] = None
+
+
+@dataclass
+class CacheEntry:
+    """Smart cache entry for analysis results."""
+    key: str
+    data: Dict[str, Any]
+    timestamp: datetime
+    ttl_minutes: int = 60  # Default TTL of 1 hour
+    hit_count: int = 0
+    
+    def is_expired(self) -> bool:
+        """Check if cache entry has expired."""
+        expiry_time = self.timestamp + timedelta(minutes=self.ttl_minutes)
+        return datetime.now(timezone.utc) > expiry_time
+    
+    def increment_hit(self):
+        """Increment hit counter for cache statistics."""
+        self.hit_count += 1
+
+
+class SmartCache:
+    """Intelligent caching system for AI analysis results."""
+    
+    def __init__(self, max_entries: int = 1000):
+        self.cache: Dict[str, CacheEntry] = {}
+        self.max_entries = max_entries
+        self.stats = {
+            "hits": 0,
+            "misses": 0,
+            "evictions": 0,
+            "total_requests": 0
+        }
+    
+    def _generate_cache_key(self, params: Dict[str, Any]) -> str:
+        """Generate a deterministic cache key from parameters."""
+        # Sort parameters for consistent key generation
+        sorted_params = json.dumps(params, sort_keys=True)
+        return hashlib.md5(sorted_params.encode()).hexdigest()
+    
+    def get(self, key: str) -> Optional[Dict[str, Any]]:
+        """Get cached data if available and not expired."""
+        self.stats["total_requests"] += 1
+        
+        if key not in self.cache:
+            self.stats["misses"] += 1
+            return None
+        
+        entry = self.cache[key]
+        if entry.is_expired():
+            del self.cache[key]
+            self.stats["misses"] += 1
+            return None
+        
+        entry.increment_hit()
+        self.stats["hits"] += 1
+        return entry.data
+    
+    def put(self, key: str, data: Dict[str, Any], ttl_minutes: int = 60):
+        """Store data in cache with TTL."""
+        # Evict expired entries first
+        self._cleanup_expired()
+        
+        # Evict least recently used if at capacity
+        if len(self.cache) >= self.max_entries:
+            self._evict_lru()
+        
+        entry = CacheEntry(
+            key=key,
+            data=data,
+            timestamp=datetime.now(timezone.utc),
+            ttl_minutes=ttl_minutes
+        )
+        self.cache[key] = entry
+    
+    def _cleanup_expired(self):
+        """Remove expired entries from cache."""
+        expired_keys = [k for k, v in self.cache.items() if v.is_expired()]
+        for key in expired_keys:
+            del self.cache[key]
+    
+    def _evict_lru(self):
+        """Evict least recently used entry."""
+        if not self.cache:
+            return
+        
+        # Find entry with lowest hit count (LFU approximation)
+        lru_key = min(self.cache.keys(), key=lambda k: self.cache[k].hit_count)
+        del self.cache[lru_key]
+        self.stats["evictions"] += 1
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache performance statistics."""
+        hit_rate = self.stats["hits"] / self.stats["total_requests"] if self.stats["total_requests"] > 0 else 0
+        return {
+            **self.stats,
+            "hit_rate": round(hit_rate, 3),
+            "cache_size": len(self.cache),
+            "max_capacity": self.max_entries
+        }
+    
+    def clear(self):
+        """Clear all cache entries."""
+        self.cache.clear()
+        self.stats = {
+            "hits": 0,
+            "misses": 0,
+            "evictions": 0,
+            "total_requests": 0
+        }
 
 
 class AIComponent(Protocol):
@@ -367,7 +480,11 @@ class CLIBridge:
         self.initialized = False
         self._initialization_lock = asyncio.Lock()
         
-        logger.info("🌉 CLI Bridge created (async initialization pending)")
+        # Smart caching for analysis results
+        self.analysis_cache = SmartCache(max_entries=500)
+        self.email_cache = SmartCache(max_entries=1000)
+        
+        logger.info("🌉 CLI Bridge created with smart caching (async initialization pending)")
     
     async def ensure_initialized(self):
         """
@@ -1166,12 +1283,27 @@ class CLIBridge:
                 }
     
     async def analyze_email_patterns(self, emails: List[Any], min_confidence: float = 0.7) -> Dict[str, Any]:
-        """Analyze email patterns using REAL email analysis instead of mock data."""
+        """Analyze email patterns using REAL email analysis with smart caching."""
         async with self._performance_context("analyze_email_patterns"):
             if not emails:
                 return {"patterns": [], "success": False, "reason": "no_emails_provided"}
             
-            logger.info(f"🔍 Analyzing {len(emails)} emails for patterns (min_confidence: {min_confidence})")
+            # Generate cache key based on email IDs and parameters
+            email_ids = [e.get('id', e.get('Id', '')) for e in emails if e.get('id') or e.get('Id')]
+            cache_params = {
+                "email_ids": sorted(email_ids),
+                "min_confidence": min_confidence,
+                "analysis_type": "patterns"
+            }
+            cache_key = self.analysis_cache._generate_cache_key(cache_params)
+            
+            # Check cache first
+            cached_result = self.analysis_cache.get(cache_key)
+            if cached_result:
+                logger.info(f"🎯 Cache HIT: Using cached analysis for {len(emails)} emails")
+                return cached_result
+            
+            logger.info(f"🔍 Cache MISS: Analyzing {len(emails)} emails for patterns (min_confidence: {min_confidence})")
             
             # REAL ANALYSIS: Analyze actual email content and metadata
             patterns = []
@@ -1189,9 +1321,10 @@ class CLIBridge:
                 patterns.append({
                     "pattern_type": "meeting_emails",
                     "email_count": len(meeting_emails),
-                    "confidence": min(0.95, 0.6 + (len(meeting_emails) / len(emails) * 0.4)),
+                    "confidence": min(0.95, 0.80 + (len(meeting_emails) / len(emails) * 0.15)),
                     "description": f"Meeting invitations and calendar events ({len(meeting_emails)} emails)",
-                    "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in meeting_emails[:3]]
+                    "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in meeting_emails[:3]],
+                    "email_ids": [e.get('id', e.get('Id', '')) for e in meeting_emails if e.get('id') or e.get('Id')]
                 })
             
             # Pattern 2: Newsletter/Marketing emails (improved detection)
@@ -1217,9 +1350,10 @@ class CLIBridge:
                 patterns.append({
                     "pattern_type": "newsletter_subscriptions", 
                     "email_count": len(unsubscribe_emails),
-                    "confidence": min(0.92, 0.65 + (len(unsubscribe_emails) / len(emails) * 0.35)),
+                    "confidence": min(0.95, 0.80 + (len(unsubscribe_emails) / len(emails) * 0.15)),
                     "description": f"Newsletter and marketing emails ({len(unsubscribe_emails)} emails)",
-                    "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in unsubscribe_emails[:3]]
+                    "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in unsubscribe_emails[:3]],
+                    "email_ids": [e.get('id', e.get('Id', '')) for e in unsubscribe_emails if e.get('id') or e.get('Id')]
                 })
             
             # Pattern 3: Job alerts and notifications  
@@ -1242,9 +1376,10 @@ class CLIBridge:
                 patterns.append({
                     "pattern_type": "job_alerts",
                     "email_count": len(job_emails),
-                    "confidence": min(0.88, 0.7 + (len(job_emails) / len(emails) * 0.25)),
+                    "confidence": min(0.95, 0.80 + (len(job_emails) / len(emails) * 0.15)),
                     "description": f"Job alerts and career opportunities ({len(job_emails)} emails)",
-                    "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in job_emails[:3]]
+                    "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in job_emails[:3]],
+                    "email_ids": [e.get('id', e.get('Id', '')) for e in job_emails if e.get('id') or e.get('Id')]
                 })
             
             # Pattern 4: Automated system emails
@@ -1263,7 +1398,8 @@ class CLIBridge:
                     "email_count": len(system_emails),
                     "confidence": min(0.88, 0.6 + (len(system_emails) / len(emails) * 0.35)),
                     "description": f"Automated system notifications ({len(system_emails)} emails)",
-                    "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in system_emails[:3]]
+                    "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in system_emails[:3]],
+                    "email_ids": [e.get('id', e.get('Id', '')) for e in system_emails if e.get('id') or e.get('Id')]
                 })
             
             # Pattern 5: Domain analysis (professional communications)
@@ -1295,7 +1431,8 @@ class CLIBridge:
                         "confidence": min(0.85, 0.5 + (len(domain_emails) / len(emails) * 0.5)),
                         "description": f"Regular communications from {domain} ({len(domain_emails)} emails)",
                         "domain": domain,
-                        "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in domain_emails[:3]]
+                        "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in domain_emails[:3]],
+                        "email_ids": [e.get('id', e.get('Id', '')) for e in domain_emails if e.get('id') or e.get('Id')]
                     })
             
             # Filter by confidence threshold
@@ -1309,7 +1446,7 @@ class CLIBridge:
             for pattern in high_confidence_patterns:
                 logger.info(f"   📊 {pattern['pattern_type']}: {pattern['email_count']} emails (confidence: {pattern['confidence']:.2f})")
             
-            return {
+            result = {
                 "patterns": high_confidence_patterns,
                 "total_patterns": len(patterns),
                 "high_confidence_patterns": len(high_confidence_patterns),
@@ -1319,6 +1456,12 @@ class CLIBridge:
                 "analysis_method": "real_content_analysis",
                 "confidence_threshold": min_confidence
             }
+            
+            # Cache the result for future use (TTL: 30 minutes for pattern analysis)
+            self.analysis_cache.put(cache_key, result, ttl_minutes=30)
+            logger.info(f"💾 Cached analysis result for {len(emails)} emails")
+            
+            return result
     
     async def generate_business_insights(self, analysis_data: Dict[str, Any], output_format: str = "summary") -> Dict[str, Any]:
         """Generate business insights from REAL analysis data."""
@@ -1644,6 +1787,31 @@ class CLIBridge:
                     result = await adapter.trash_emails_tool(
                         message_ids=parameters.get("message_ids", [])
                     )
+                elif tool_name in ["damien_create_label", "damien_delete_label", "damien_list_labels", 
+                                  "damien_smart_rule", "damien_organize_emails", "damien_parse_natural_language_rule",
+                                  "damien_add_rule", "damien_apply_rules"]:
+                    # Use registry-based approach for organization tools
+                    from ..services.tool_registry import tool_registry
+                    
+                    # Get tool definition and handler
+                    tool_def = tool_registry.get_tool_definition(tool_name)
+                    if not tool_def:
+                        raise ValueError(f"Tool '{tool_name}' not found in registry")
+                    
+                    handler_func = tool_registry.get_handler(tool_def.handler_name)
+                    if not handler_func:
+                        raise ValueError(f"Handler for tool '{tool_name}' not found")
+                    
+                    # Prepare context
+                    context = {
+                        "session_id": "cli_bridge_call",
+                        "user_id": "default_user", 
+                        "tool_name": tool_name,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
+                    
+                    # Execute handler
+                    result = await handler_func(parameters, context)
                 else:
                     raise ValueError(f"Unsupported tool: {tool_name}")
                 
@@ -1821,3 +1989,59 @@ class CLIBridge:
         # Weighted average
         final_score = (sample_score * 0.4) + (pattern_score * 0.3) + (coverage_score * 0.3)
         return round(final_score, 2)
+    
+    async def execute_tool_command(self, tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a tool command through the CLI bridge."""
+        async with self._performance_context(f"execute_tool_{tool_name}"):
+            try:
+                # Import and use the damien adapter to execute the tool
+                from ..dependencies.dependencies_service import get_damien_adapter
+                from ..routers.tools import preprocess_mcp_parameters
+                
+                # Get damien adapter instance
+                damien_adapter = await get_damien_adapter()
+                
+                # Preprocess parameters (handle JSON strings, etc.)
+                processed_params = preprocess_mcp_parameters(params)
+                
+                # Execute the tool through the adapter
+                result = await damien_adapter.execute_tool(tool_name, processed_params)
+                
+                logger.info(f"Successfully executed {tool_name} with {len(processed_params)} parameters")
+                return result
+                
+            except Exception as e:
+                logger.error(f"Error executing tool {tool_name}: {e}", exc_info=True)
+                return {
+                    "success": False,
+                    "error": f"Failed to execute {tool_name}: {str(e)}"
+                }
+    
+    def get_cache_statistics(self) -> Dict[str, Any]:
+        """Get comprehensive cache performance statistics."""
+        return {
+            "analysis_cache": self.analysis_cache.get_stats(),
+            "email_cache": self.email_cache.get_stats(),
+            "total_cache_memory": len(self.analysis_cache.cache) + len(self.email_cache.cache),
+            "recommendation": self._get_cache_recommendation()
+        }
+    
+    def _get_cache_recommendation(self) -> str:
+        """Generate cache optimization recommendations."""
+        analysis_stats = self.analysis_cache.get_stats()
+        email_stats = self.email_cache.get_stats()
+        
+        if analysis_stats["hit_rate"] > 0.8:
+            return "Excellent cache performance - patterns are being reused effectively"
+        elif analysis_stats["hit_rate"] > 0.5:
+            return "Good cache performance - consider increasing cache size for better hits"
+        elif analysis_stats["total_requests"] < 10:
+            return "Not enough data yet - cache performance will improve with usage"
+        else:
+            return "Low cache hit rate - consider reviewing query patterns or increasing TTL"
+    
+    def clear_caches(self):
+        """Clear all caches and reset statistics."""
+        self.analysis_cache.clear()
+        self.email_cache.clear()
+        logger.info("🧹 All caches cleared")

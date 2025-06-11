@@ -62,10 +62,20 @@ async def startup_event():
     register_async_tools()  # 🔥 Background Job Processing Tools
     register_enhanced_trash_tools()  # 🗑️ Enhanced Trash Operations
     
+    # Register organization tools
+    logger.info("📁 Registering organization tools...")
+    try:
+        from .tools.organization_tools import register_organization_tools
+        register_organization_tools()
+        logger.info("✅ Organization tools registration completed")
+    except Exception as e:
+        logger.error(f"❌ Organization tools registration failed: {e}", exc_info=True)
+    
     logger.info(f"🎉 MCP Server started with {len(tool_registry.get_all_tools())} tools registered")
     logger.info("✅ Phase 4 AI Intelligence integration complete!")
     logger.info("🚀 Background job processing system active!")
     logger.info("🗑️ Enhanced trash operations available!")
+    logger.info("📁 Smart organization tools ready!")
 
 
 @app.get("/health", summary="Health Check", tags=["System"])

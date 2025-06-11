@@ -306,6 +306,149 @@ def get_label_id_from_name(gmail_service, label_name: str) -> Optional[str]:
     return get_label_id(gmail_service, label_name)
 
 
+@with_rate_limiting
+def create_label(gmail_service, label_name: str, label_list_visibility: str = "labelShow", 
+                message_list_visibility: str = "show", background_color: str = None,
+                text_color: str = None) -> Dict[str, Any]:
+    """
+    Create a new Gmail label.
+    
+    Args:
+        gmail_service: Authenticated Gmail service client
+        label_name: Name of the label to create
+        label_list_visibility: Visibility in label list ("labelShow", "labelShowIfUnread", "labelHide")
+        message_list_visibility: Visibility in message list ("show", "hide")
+        background_color: Hex color for label background (e.g., "#42d692")
+        text_color: Hex color for label text (e.g., "#094228")
+        
+    Returns:
+        Dict containing the created label information
+        
+    Raises:
+        GmailApiError: If API call fails or label already exists
+    """
+    try:
+        # Check if label already exists
+        existing_id = get_label_id(gmail_service, label_name)
+        if existing_id:
+            logger.info(f"Label '{label_name}' already exists with ID: {existing_id}")
+            return {
+                "success": True,
+                "already_exists": True,
+                "label_id": existing_id,
+                "label_name": label_name,
+                "message": f"Label '{label_name}' already exists"
+            }
+        
+        # Prepare label body
+        label_body = {
+            "name": label_name,
+            "labelListVisibility": label_list_visibility,
+            "messageListVisibility": message_list_visibility
+        }
+        
+        # Add color if specified
+        if background_color or text_color:
+            label_body["color"] = {}
+            if background_color:
+                label_body["color"]["backgroundColor"] = background_color
+            if text_color:
+                label_body["color"]["textColor"] = text_color
+        
+        # Create the label
+        result = gmail_service.users().labels().create(
+            userId='me',
+            body=label_body
+        ).execute()
+        
+        # Update cache with new label
+        _label_name_to_id_cache[label_name.lower()] = result['id']
+        _label_name_to_id_cache[result['id']] = result['id']
+        
+        logger.info(f"Created label '{label_name}' with ID: {result['id']}")
+        
+        return {
+            "success": True,
+            "label_id": result['id'],
+            "label_name": result['name'],
+            "created": True,
+            "message": f"Successfully created label '{label_name}'"
+        }
+        
+    except HttpError as e:
+        if e.resp.status == 409:
+            # Label already exists (shouldn't happen due to our check, but just in case)
+            raise GmailApiError(f"Label '{label_name}' already exists")
+        else:
+            error_details = e.error_details[0] if e.error_details else {}
+            raise GmailApiError(
+                f"Failed to create label: {error_details.get('message', str(e))}"
+            )
+    except Exception as e:
+        raise GmailApiError(f"Unexpected error creating label: {str(e)}")
+
+
+@with_rate_limiting
+def delete_label(gmail_service, label_name: str) -> Dict[str, Any]:
+    """
+    Delete a Gmail label.
+    
+    Args:
+        gmail_service: Authenticated Gmail service client
+        label_name: Name or ID of the label to delete
+        
+    Returns:
+        Dict containing deletion result
+        
+    Raises:
+        GmailApiError: If API call fails or label not found
+    """
+    try:
+        # Get label ID
+        label_id = get_label_id(gmail_service, label_name)
+        if not label_id:
+            raise GmailApiError(f"Label '{label_name}' not found")
+        
+        # System labels cannot be deleted
+        system_labels = ["INBOX", "SPAM", "TRASH", "UNREAD", "IMPORTANT", "STARRED", "SENT", "DRAFT",
+                        "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS", "CATEGORY_UPDATES", "CATEGORY_FORUMS"]
+        if label_id in system_labels:
+            raise GmailApiError(f"Cannot delete system label '{label_name}'")
+        
+        # Delete the label
+        gmail_service.users().labels().delete(
+            userId='me',
+            id=label_id
+        ).execute()
+        
+        # Remove from cache
+        if label_name.lower() in _label_name_to_id_cache:
+            del _label_name_to_id_cache[label_name.lower()]
+        if label_id in _label_name_to_id_cache:
+            del _label_name_to_id_cache[label_id]
+        
+        logger.info(f"Deleted label '{label_name}' (ID: {label_id})")
+        
+        return {
+            "success": True,
+            "label_id": label_id,
+            "label_name": label_name,
+            "deleted": True,
+            "message": f"Successfully deleted label '{label_name}'"
+        }
+        
+    except HttpError as e:
+        if e.resp.status == 404:
+            raise GmailApiError(f"Label '{label_name}' not found")
+        else:
+            error_details = e.error_details[0] if e.error_details else {}
+            raise GmailApiError(
+                f"Failed to delete label: {error_details.get('message', str(e))}"
+            )
+    except Exception as e:
+        raise GmailApiError(f"Unexpected error deleting label: {str(e)}")
+
+
 # Message Management Functions
 @with_rate_limiting  
 def list_messages(gmail_service, query_string: str = None, max_results: int = 100, 

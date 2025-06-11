@@ -293,16 +293,6 @@ async def execute_tool_endpoint(
                 if api_response.get("success"): tool_output_data = api_response.get("data")
                 else: is_error_flag = True; error_message = api_response.get("error_message", "Unknown error from damien_mark_emails tool.")
         
-        elif tool_name == "damien_list_labels":
-            try:
-                list_labels_params = ListLabelsParams(**params_dict)
-            except ValidationError as e:
-                is_error_flag = True; error_message = f"Invalid parameters for {tool_name}: {e.errors()}"
-            if not is_error_flag:
-                api_response = await adapter.list_labels_tool()
-                if api_response.get("success"): tool_output_data = api_response.get("data")
-                else: is_error_flag = True; error_message = api_response.get("error_message", "Unknown error from damien_list_labels tool.")
-
         elif tool_name == "damien_count_emails_by_label":
             try:
                 label_name = params_dict.get("label_name")
@@ -411,9 +401,12 @@ async def execute_tool_endpoint(
                            "damien_ai_create_rule", "damien_ai_get_insights", "damien_ai_optimize_inbox",
                            # Async job tools added here 
                            "damien_ai_analyze_emails_async", "damien_job_get_status", "damien_job_get_result",
-                           "damien_job_cancel", "damien_job_list",
+                           "damien_job_cancel", "damien_job_list", "damien_ai_bulk_operations",
                            # Enhanced trash tools added here
-                           "damien_trash_emails_by_query", "damien_smart_trash_marketing"]:
+                           "damien_trash_emails_by_query", "damien_smart_trash_marketing",
+                           # Organization tools added here
+                           "damien_create_label", "damien_delete_label", "damien_list_labels",
+                           "damien_smart_rule", "damien_organize_emails"]:
             try:
                 # Import tool registry to get the handler
                 from ..services.tool_registry import tool_registry
@@ -625,12 +618,6 @@ async def list_tools_endpoint():
             "output_schema": LabelEmailsOutput.model_json_schema()
         },
         {
-            "name": "damien_list_labels",
-            "description": "Lists all Gmail labels for the authenticated user, including both system labels (INBOX, SENT, etc.) and user-created labels. Returns detailed information about each label including message counts.",
-            "input_schema": ListLabelsParams.model_json_schema(),
-            "output_schema": ListLabelsOutput.model_json_schema()
-        },
-        {
             "name": "damien_count_emails_by_label",
             "description": "🔢 ENTERPRISE: Counts total emails with a specific label using pagination-aware search. Automatically handles Gmail's 100-result-per-page limit for accurate counts up to 10,000+ emails. More reliable than list_labels message counts.",
             "input_schema": {
@@ -744,3 +731,15 @@ async def list_tools_endpoint():
 from ..tools import settings_tools
 from ..tools import draft_tools
 from ..tools import thread_tools
+
+# Import and register AI intelligence tools
+from ..tools.register_ai_intelligence import register_ai_intelligence_tools
+register_ai_intelligence_tools()
+
+# Import and register async tools
+from ..tools.async_tools import register_async_tools
+register_async_tools()
+
+# Import and register enhanced trash tools
+from ..tools.enhanced_trash_tool import register_enhanced_trash_tools
+register_enhanced_trash_tools()
