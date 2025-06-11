@@ -115,7 +115,7 @@ System: ✓ Smart pattern detection for marketing emails
 - **Reduced support** requests for rule creation
 
 ### System Integration
-- **Seamless integration** with existing 41 tools
+- **Seamless integration** with existing 46 tools
 - **Registry-based routing** for scalability
 - **Async processing** support for large operations
 - **Error handling** and validation throughout
