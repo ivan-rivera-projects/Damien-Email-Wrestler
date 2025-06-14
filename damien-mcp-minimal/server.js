@@ -21,8 +21,6 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import DamienClient from './core/damien-client.js';
 import { CONFIG, validateConfig, logConfig } from './config/claude-max-config.js';
-// Phase system removed - exposing all tools directly
-// import phaseManager, { TOOL_PHASES } from './core/tool-phases.js';
 import http from 'http';
 
 class MinimalDamienMCP {
@@ -87,8 +85,6 @@ class MinimalDamienMCP {
       
       this.log('Backend client initialized successfully');
       
-      // Phase validation removed - all tools will be exposed
-      // this.validatePhaseTools();
     } catch (error) {
       this.logError('Failed to initialize backend client', error);
       process.exit(1);
@@ -96,7 +92,7 @@ class MinimalDamienMCP {
   }
   
   /**
-   * Phase validation removed - all backend tools will be exposed
+   * Validate that all backend tools are accessible
    */
   async validateAllTools() {
     try {
@@ -132,11 +128,6 @@ class MinimalDamienMCP {
       // Set up request handlers
       this.setupRequestHandlers();
       
-      // Phase change events removed - cache will only refresh on expiration
-      // phaseManager.onPhaseChange((previousPhase, newPhase) => {
-      //   this.log(`Phase changed from ${previousPhase} to ${newPhase}, invalidating tools cache`);
-      //   this.invalidateToolsCache();
-      // });
       
       this.log('MCP Server initialized successfully');
     } catch (error) {
@@ -212,8 +203,7 @@ class MinimalDamienMCP {
         }
         this.requestStats.callTool.byTool[name].count++;
         
-        // Phase filtering removed - all tools are available
-        // Tool availability will be checked by the backend
+        // All tools are available - backend will validate tool existence
         this.log(`Executing tool: ${name}`);
         
         // Validate tool arguments based on schema
@@ -234,7 +224,6 @@ class MinimalDamienMCP {
           
           // Record performance metrics
           const responseTime = Date.now() - startTime;
-          // phaseManager.recordToolExecution(name, responseTime, false);
           
           this.logRequest(requestId, `CallTool:${name}`, 'success', { 
             responseTimeMs: responseTime
@@ -274,9 +263,9 @@ class MinimalDamienMCP {
         }
         
         // Record performance metrics for the error
-        // if (hasError) {
-        //   phaseManager.recordToolExecution(name, responseTime, true);
-        // }
+        if (hasError) {
+          this.log(`Tool ${name} failed after ${responseTime}ms: ${error.message}`);
+        }
         
         this.logRequest(requestId, `CallTool:${name}`, 'error', { 
           error: error.message,
@@ -334,8 +323,6 @@ class MinimalDamienMCP {
     this.log('Starting graceful shutdown...');
 
     try {
-      // Phase manager cleanup removed
-      // phaseManager.shutdown();
       
       // Close transport if connected
       if (this.transport) {
@@ -369,10 +356,9 @@ class MinimalDamienMCP {
       const allTools = await this.validateAllTools();
       
       this.log('✅ Minimal Damien MCP Server started successfully');
-      this.log(`📊 Phase System: BYPASSED - All tools exposed`);
       this.log(`📋 Configuration: Direct backend access`);
-      this.log(`🛠️ Available Tools: ${allTools.length} tools (all backend tools)`);
-      this.log(`🎯 Performance: No phase restrictions applied`);
+      this.log(`🛠️ Available Tools: ${allTools.length} tools`);
+      this.log(`🎯 Performance: All tools available without restrictions`);
       
     } catch (error) {
       this.logError('Failed to start MCP server', error);
@@ -484,8 +470,7 @@ class MinimalDamienMCP {
               return;
             }
             
-            // Phase filtering removed - all tools available
-            // Tool existence will be validated by backend
+            // All tools available - backend validates tool existence
             
             // Execute the tool
             const result = await this.damienClient.executeTool(toolName, toolParams || {});
@@ -515,8 +500,7 @@ class MinimalDamienMCP {
           return;
         }
         
-        // Phase filtering removed - all tools available
-        // Tool existence will be validated by backend
+        // All tools available - backend validates tool existence
         
         // Parse request body for tool parameters
         let body = '';
@@ -686,10 +670,8 @@ class MinimalDamienMCP {
         hasData: !!this.toolsCache.data
       },
       phase: {
-        current: 'BYPASSED',
-        name: 'All Tools Exposed',
-        toolCount: this.toolsCache.data ? this.toolsCache.data.length : 0,
-        performance: { note: 'Phase performance metrics disabled' }
+        status: 'All tools enabled',
+        toolCount: this.toolsCache.data ? this.toolsCache.data.length : 0
       }
     };
   }

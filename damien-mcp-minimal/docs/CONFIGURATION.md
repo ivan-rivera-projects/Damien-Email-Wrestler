@@ -22,13 +22,6 @@ The server supports the following environment variables:
 | `DAMIEN_MCP_SERVER_API_KEY` | API key for authentication | *See .env.example* |
 | `DAMIEN_MCP_MINIMAL_PORT` | Port for the minimal MCP server | `8893` |
 
-### Phase Management
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DAMIEN_INITIAL_PHASE` | Initial phase to start with | `1` |
-| `DAMIEN_PHASE_AUTO_PROGRESS` | Enable automatic phase progression | `false` |
-
 ### Request Configuration
 
 | Variable | Description | Default |
@@ -118,23 +111,9 @@ Options:
 - `--force`: Skip confirmation prompts
 - `--help`: Show help message
 
-## Phase Configuration
+## Tool Configuration
 
-The server implements a phase-based approach for tool rollout:
-
-1. **Phase 1**: Essential core functionality (5 tools)
-2. **Phase 2**: Basic email actions (7 tools)
-3. **Phase 3**: Thread management (5 tools)
-4. **Phase 4**: Rule management (5 tools)
-5. **Phase 5**: AI intelligence (9 tools)
-6. **Phase 6**: Account settings (6 tools)
-
-To change the active phase:
-
-```bash
-# In .env file
-DAMIEN_INITIAL_PHASE=2
-```
+The server provides access to all 46 Damien tools without restrictions. All tools are loaded directly from the backend server and are immediately available for use.
 
 ## Troubleshooting
 
@@ -153,7 +132,6 @@ DAMIEN_INITIAL_PHASE=2
 3. **Tools not available**:
    - Check if backend server is running
    - Verify API key is correct
-   - Check which phase is active
    - Clear tool cache by restarting the server
 
 ### Logs

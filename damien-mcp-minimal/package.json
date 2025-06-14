@@ -10,8 +10,6 @@
     "test:all": "./scripts/run-tests.sh --all",
     "test:basic": "./scripts/run-tests.sh --basic-only",
     "test:compat": "node tests/claude-max-compatibility.test.js",
-    "test:phase": "node tests/phase-progression.test.js",
-    "test:all-phases": "node tests/run-all-phases.js",
     "test:integration": "node tests/integration.test.js",
     "benchmark": "./scripts/run-tests.sh --benchmark",
     "deploy": "./scripts/deploy-minimal.sh",
@@ -22,13 +20,6 @@
     "migrate:dry-run": "./scripts/migrate-to-minimal.sh --dry-run",
     "rollback-migration": "./scripts/rollback-from-minimal.sh",
     "validate": "./scripts/validate-migration.sh",
-    "phase:next": "./scripts/expand-to-phase.sh",
-    "phase:2": "./scripts/expand-to-phase.sh --phase 2",
-    "phase:3": "./scripts/expand-to-phase.sh --phase 3",
-    "phase:4": "./scripts/expand-to-phase.sh --phase 4", 
-    "phase:5": "./scripts/expand-to-phase.sh --phase 5",
-    "phase:6": "./scripts/expand-to-phase.sh --phase 6",
-    "phase:rollback": "./scripts/expand-to-phase.sh --rollback",
     "dev": "node --inspect server.js"
   },
   "keywords": [

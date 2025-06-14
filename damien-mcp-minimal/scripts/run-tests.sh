@@ -30,7 +30,6 @@ NC='\033[0m' # No Color
 # Default options
 RUN_BASIC=true
 RUN_COMPAT=true
-RUN_PHASE=true
 RUN_INTEGRATION=false
 RUN_BENCHMARK=false
 VERBOSE=false
@@ -41,13 +40,11 @@ while [[ "$#" -gt 0 ]]; do
     --basic-only) 
       RUN_BASIC=true
       RUN_COMPAT=false
-      RUN_PHASE=false
       RUN_INTEGRATION=false
       ;;
     --backend-only)
       RUN_BASIC=false
       RUN_COMPAT=false
-      RUN_PHASE=false
       RUN_INTEGRATION=true
       ;;
     --integration)
@@ -56,7 +53,6 @@ while [[ "$#" -gt 0 ]]; do
     --all)
       RUN_BASIC=true
       RUN_COMPAT=true
-      RUN_PHASE=true
       RUN_INTEGRATION=true
       ;;
     --benchmark)
@@ -130,8 +126,6 @@ run_test "Damien Client Tests" "tests/damien-client.test.js" true "$RUN_BASIC"
 # Run Claude MAX compatibility tests
 run_test "Claude MAX Compatibility Tests" "tests/claude-max-compatibility.test.js" false "$RUN_COMPAT"
 
-# Run Phase Progression tests
-run_test "Phase Progression Tests" "tests/phase-progression.test.js" false "$RUN_PHASE"
 
 # Run Integration tests
 run_test "Integration Tests" "tests/integration.test.js" false "$RUN_INTEGRATION"

@@ -10,8 +10,8 @@ The minimal MCP server is a complete rewrite of the MCP adapter layer, designed 
 
 - **Claude MAX Compatibility**: Prevents crashes in Claude Desktop
 - **Improved Performance**: Optimized caching and request handling
-- **Phased Tool Deployment**: Gradually introduces functionality across 6 phases
-- **Comprehensive Testing**: Validates functionality at each phase
+- **Direct Tool Access**: Provides immediate access to all 46 tools
+- **Comprehensive Testing**: Validates all tool functionality
 - **Full Rollback Capability**: Safe migration with easy reversal if needed
 
 ## Prerequisites
@@ -120,25 +120,19 @@ You can also specify a particular backup to restore:
 ./scripts/rollback-from-minimal.sh --backup-id ID    # Restore specific backup
 ```
 
-## Phase Progression
+## Tool Access
 
-The minimal MCP server implements a phased approach to tool deployment:
+The minimal MCP server provides direct access to all Damien tools:
 
-1. **Phase 1**: Essential core functionality (5 tools)
-   - damien_list_emails, damien_get_email_details, damien_create_draft, damien_send_draft, damien_list_drafts
+**All 46 Tools Available**: Complete email management suite immediately accessible
+- Email Management: List, get details, trash, label, mark read/unread
+- Draft Operations: Create, update, send, delete drafts
+- Thread Management: Full conversation-level operations
+- Rule Management: Email automation and filtering
+- AI Intelligence: Advanced analysis and insights
+- Account Settings: Configuration management
 
-2. **Phase 2**: Basic actions (7 tools)
-   - damien_trash_emails, damien_label_emails, damien_mark_emails, damien_update_draft, damien_delete_draft, damien_get_draft_details, damien_delete_emails_permanently
-
-3. **Phase 3-6**: Additional tools (23 tools)
-   - Thread management, rule management, AI intelligence, account settings
-
-To change the active phase, set the `DAMIEN_INITIAL_PHASE` environment variable:
-
-```bash
-# In .env file
-DAMIEN_INITIAL_PHASE=2  # Enable Phase 2 tools
-```
+The server automatically discovers and exposes all available tools from the backend without any configuration needed.
 
 ## Performance Monitoring
 

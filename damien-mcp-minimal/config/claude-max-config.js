@@ -63,9 +63,6 @@ export const CONFIG = {
   // Tool caching settings
   TOOL_CACHE_DURATION: parseInt(process.env.DAMIEN_TOOL_CACHE_DURATION || '3600000', 10), // 1 hour
   
-  // Phase management
-  INITIAL_PHASE: parseInt(process.env.DAMIEN_INITIAL_PHASE || '1', 10),
-  PHASE_AUTO_PROGRESS: process.env.DAMIEN_PHASE_AUTO_PROGRESS === 'true',
   
   // Logging configuration
   LOG_LEVEL: process.env.LOG_LEVEL || 'INFO',
@@ -117,10 +114,6 @@ export function validateConfig() {
     errors.push(`Invalid server port: ${CONFIG.SERVER_PORT}. Must be between 1024 and 65535.`);
   }
   
-  // Validate initial phase
-  if (isNaN(CONFIG.INITIAL_PHASE) || CONFIG.INITIAL_PHASE < 1 || CONFIG.INITIAL_PHASE > 6) {
-    errors.push(`Invalid initial phase: ${CONFIG.INITIAL_PHASE}. Must be between 1 and 6.`);
-  }
   
   // Validate timeout values
   if (isNaN(CONFIG.DEFAULT_TIMEOUT) || CONFIG.DEFAULT_TIMEOUT < 1000) {
@@ -148,7 +141,6 @@ export function logConfig() {
     console.error(`   API Key: ${CONFIG.API_KEY.substring(0, 16)}...`);
     console.error(`   Server Name: ${CONFIG.SERVER_NAME}`);
     console.error(`   Server Port: ${CONFIG.SERVER_PORT}`);
-    console.error(`   Initial Phase: ${CONFIG.INITIAL_PHASE}`);
     console.error(`   Environment: ${CONFIG.NODE_ENV}`);
     console.error(`   Log Level: ${CONFIG.LOG_LEVEL}`);
     console.error(`   Tool Cache Duration: ${CONFIG.TOOL_CACHE_DURATION}ms (${CONFIG.TOOL_CACHE_DURATION / 1000 / 60} minutes)`);
