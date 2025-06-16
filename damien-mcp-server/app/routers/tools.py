@@ -92,6 +92,24 @@ logger = logging.getLogger("damien_mcp_server_app") # Use the configured app log
 # Create router
 router = APIRouter()
 
+@router.get("/optimization_status", summary="Get timeout optimization status")
+async def get_optimization_status(api_key: str = Depends(verify_api_key)):
+    """Get the status of timeout optimization and routing statistics."""
+    from ..middleware.timeout_router import timeout_router
+    
+    routing_stats = timeout_router.get_routing_stats()
+    
+    return {
+        "optimization_enabled": True,
+        "routing_stats": routing_stats,
+        "description": "Timeout-aware routing automatically directs long-running operations to async versions",
+        "benefits": [
+            "Prevents Claude Code MCP timeouts",
+            "Enables large-scale operations via async processing", 
+            "Maintains full functionality with better performance"
+        ]
+    }
+
 # Fixed user ID for now, assuming personal use
 SERVER_USER_ID = settings.default_user_id
 
@@ -169,6 +187,19 @@ async def execute_tool_endpoint(
 
     # Preprocess parameters to handle JSON string lists from MCP clients
     params_dict = preprocess_mcp_parameters(params_dict)
+    
+    # OPTIMIZATION: Apply timeout-aware routing for Claude Code compatibility
+    from ..middleware.timeout_router import timeout_router
+    original_tool_name = tool_name
+    final_tool_name, final_params, is_async_route = timeout_router.route_tool_request(tool_name, params_dict)
+    
+    # Log routing decision
+    if final_tool_name != original_tool_name:
+        logger.info(f"🔀 ROUTE CHANGE: {original_tool_name} → {final_tool_name} (async: {is_async_route})")
+    
+    # Use routed tool name and parameters
+    tool_name = final_tool_name
+    params_dict = final_params
 
     # Debug logging to see exactly what we're receiving
     logger.info(f"=== DEBUGGING PARAMETERS ===")

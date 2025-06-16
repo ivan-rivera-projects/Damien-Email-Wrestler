@@ -19,7 +19,7 @@ check_service() {
     local name=$2
     local port=$3
     
-    if curl -s "$url" | grep -q "ok" > /dev/null 2>&1; then
+    if curl -s --connect-timeout 2 --max-time 5 "$url" | grep -q "ok" > /dev/null 2>&1; then
         echo -e "${GREEN}✓${NC} $name: Running on port $port"
         return 0
     else
@@ -31,7 +31,7 @@ check_service() {
 # Function to count tools
 get_tool_count() {
     local api_key=$1
-    curl -s -H "X-API-Key: $api_key" "http://localhost:8892/mcp/list_tools" | python3 -c "import sys, json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0"
+    curl -s --connect-timeout 2 --max-time 5 -H "X-API-Key: $api_key" "http://localhost:8892/mcp/list_tools" | python3 -c "import sys, json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0"
 }
 
 # Check services

@@ -221,6 +221,11 @@ class DamienAdapter:
             # 'id', 'threadId', requested headers, or an 'error' field per message.
             email_summaries = result_data.get("messages", [])
             
+            # Debug logging to trace header issue
+            if include_headers:
+                logger.info(f"DEBUG: include_headers requested: {include_headers}")
+                logger.info(f"DEBUG: First email summary: {email_summaries[0] if email_summaries else 'No emails'}")
+            
             return {
                 "success": True,
                 "data": {
@@ -1452,6 +1457,38 @@ class DamienAdapter:
                     "user_labels": 0,
                     "status_message": f"Unexpected error: {str(e)}"
                 }
+            }
+
+    async def execute_tool(self, tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a tool by routing to the appropriate method."""
+        try:
+            # Route to appropriate tool method based on tool name
+            if tool_name == "damien_trash_emails":
+                message_ids = params.get("message_ids", [])
+                return await self.trash_emails_tool(message_ids=message_ids)
+            
+            elif tool_name == "damien_label_emails":
+                message_ids = params.get("message_ids", [])
+                add_label_names = params.get("add_label_names")
+                remove_label_names = params.get("remove_label_names")
+                return await self.label_emails_tool(
+                    message_ids=message_ids,
+                    add_label_names=add_label_names,
+                    remove_label_names=remove_label_names
+                )
+            
+            else:
+                return {
+                    "success": False,
+                    "error_message": f"Tool '{tool_name}' not supported by execute_tool method",
+                    "supported_tools": ["damien_trash_emails", "damien_label_emails"]
+                }
+                
+        except Exception as e:
+            logger.error(f"Error executing tool {tool_name}: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error_message": f"Failed to execute {tool_name}: {str(e)}"
             }
 
     # Add more methods for other tools here

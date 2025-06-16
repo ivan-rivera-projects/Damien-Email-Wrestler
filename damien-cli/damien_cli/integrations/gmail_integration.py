@@ -195,9 +195,14 @@ def list_messages(
                     
                     # Extract requested headers
                     headers = message_details.get('payload', {}).get('headers', [])
+                    # Debug: Log available headers
+                    available_headers = [h['name'] for h in headers]
+                    click.echo(f"DEBUG: Available headers for message {message['id']}: {available_headers[:10]}...")
+                    
                     for header in headers:
                         if header['name'] in include_headers:
                             enriched_message[header['name']] = header['value']
+                            click.echo(f"DEBUG: Added header {header['name']}: {header['value'][:50]}...")
                     
                     enriched_messages.append(enriched_message)
                     

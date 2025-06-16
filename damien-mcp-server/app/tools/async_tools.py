@@ -237,6 +237,177 @@ async def damien_job_list_handler(params: Dict[str, Any], context: Dict[str, Any
         }
 
 
+async def damien_ai_bulk_operations_handler(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Handler for AI-powered bulk operations based on analysis results."""
+    try:
+        # Extract parameters
+        job_id = params.get("job_id")
+        operation = params.get("operation", "trash")  # trash, label, archive, mark_read
+        pattern_filter = params.get("pattern_filter", [])  # Filter by pattern types
+        min_confidence = params.get("min_confidence", 0.85)
+        max_emails = params.get("max_emails", 100)
+        dry_run = params.get("dry_run", True)
+        additional_params = params.get("additional_params", {})  # For label names, etc.
+        
+        if not job_id:
+            return {
+                "success": False,
+                "error": "job_id parameter is required"
+            }
+        
+        # Define the bulk operations task
+        async def bulk_operations_task(task_params):
+            from ..services.cli_bridge import CLIBridge
+            
+            cli_bridge = CLIBridge()
+            await cli_bridge.ensure_initialized()
+            
+            # Get the analysis results
+            analysis_status = async_processor.get_task_status(task_params["source_job_id"])
+            if not analysis_status or analysis_status["status"] != "completed":
+                raise Exception(f"Source analysis job {task_params['source_job_id']} not completed")
+            
+            analysis_result = analysis_status["result"]
+            detailed_patterns = analysis_result.get("insights", {}).get("detailed_patterns", [])
+            
+            # Filter patterns by type and confidence
+            target_patterns = []
+            for pattern in detailed_patterns:
+                pattern_type = pattern.get("pattern_type", "")
+                pattern_confidence = pattern.get("confidence", 0)
+                
+                # Apply filters
+                if pattern_filter and pattern_type not in pattern_filter:
+                    continue
+                if pattern_confidence < task_params["min_confidence"]:
+                    continue
+                
+                target_patterns.append(pattern)
+            
+            # Collect email IDs from filtered patterns
+            target_email_ids = []
+            pattern_summary = []
+            
+            for pattern in target_patterns:
+                email_ids = pattern.get("email_ids", [])
+                if email_ids:
+                    # Limit emails per pattern to prevent overwhelming operations
+                    limited_ids = email_ids[:task_params["max_emails"]]
+                    target_email_ids.extend(limited_ids)
+                    
+                    pattern_summary.append({
+                        "pattern_type": pattern.get("pattern_type"),
+                        "emails_targeted": len(limited_ids),
+                        "confidence": pattern.get("confidence"),
+                        "description": pattern.get("description")
+                    })
+            
+            # Remove duplicates while preserving order
+            unique_email_ids = list(dict.fromkeys(target_email_ids))
+            
+            # Limit total emails
+            if len(unique_email_ids) > task_params["max_emails"]:
+                unique_email_ids = unique_email_ids[:task_params["max_emails"]]
+            
+            if not unique_email_ids:
+                return {
+                    "status": "success",
+                    "operation": task_params["operation"],
+                    "emails_processed": 0,
+                    "message": "No emails found matching the criteria",
+                    "pattern_summary": pattern_summary,
+                    "dry_run": task_params["dry_run"]
+                }
+            
+            # Execute operation if not dry run
+            operation_result = {}
+            if not task_params["dry_run"]:
+                operation_type = task_params["operation"]
+                
+                if operation_type == "trash":
+                    operation_result = await cli_bridge.execute_tool_command(
+                        "damien_trash_emails",
+                        {"message_ids": unique_email_ids}
+                    )
+                elif operation_type == "label":
+                    label_names = task_params["additional_params"].get("label_names", ["AI_PROCESSED"])
+                    operation_result = await cli_bridge.execute_tool_command(
+                        "damien_label_emails",
+                        {
+                            "message_ids": unique_email_ids,
+                            "add_label_names": label_names
+                        }
+                    )
+                elif operation_type == "archive":
+                    # Archive by removing INBOX label
+                    operation_result = await cli_bridge.execute_tool_command(
+                        "damien_label_emails",
+                        {
+                            "message_ids": unique_email_ids,
+                            "remove_label_names": ["INBOX"]
+                        }
+                    )
+                elif operation_type == "mark_read":
+                    operation_result = await cli_bridge.execute_tool_command(
+                        "damien_mark_emails",
+                        {
+                            "message_ids": unique_email_ids,
+                            "mark_as_read": True
+                        }
+                    )
+                else:
+                    raise Exception(f"Unsupported operation: {operation_type}")
+            
+            return {
+                "status": "success",
+                "operation": task_params["operation"],
+                "emails_processed": len(unique_email_ids),
+                "email_ids_processed": unique_email_ids,
+                "pattern_summary": pattern_summary,
+                "operation_result": operation_result,
+                "dry_run": task_params["dry_run"],
+                "confidence_threshold": task_params["min_confidence"]
+            }
+        
+        # Submit bulk operations task
+        task_id = await async_processor.submit_task(
+            name=f"AI bulk {operation} ({len(pattern_filter) if pattern_filter else 'all'} patterns)",
+            processor_func=bulk_operations_task,
+            parameters={
+                "source_job_id": job_id,
+                "operation": operation,
+                "pattern_filter": pattern_filter,
+                "min_confidence": min_confidence,
+                "max_emails": max_emails,
+                "dry_run": dry_run,
+                "additional_params": additional_params
+            }
+        )
+        
+        logger.info(f"Started AI bulk operations task {task_id} for {operation}")
+        
+        return {
+            "success": True,
+            "job_id": task_id,
+            "status": "started",
+            "operation": operation,
+            "source_analysis_job": job_id,
+            "message": f"Background bulk {operation} operation started",
+            "dry_run": dry_run,
+            "tracking": {
+                "use_damien_job_get_status": f"Check progress with damien_job_get_status(job_id='{task_id}')",
+                "use_damien_job_get_result": f"Get results with damien_job_get_result(job_id='{task_id}') when complete"
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting AI bulk operations: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": f"Failed to start AI bulk operations: {str(e)}"
+        }
+
+
 def register_async_tools():
     """Register all async job processing tools."""
     logger.info("🚀 Starting registration of async job processing tools...")
@@ -351,7 +522,66 @@ def register_async_tools():
     )
     tool_registry.register_tool(tool_def5, damien_job_list_handler)
     
-    logger.info("✅ Successfully registered 5 async job processing tools")
+    # AI Bulk Operations tool
+    tool_def6 = ToolDefinition(
+        name="damien_ai_bulk_operations",
+        description="🎯 INTELLIGENT BULK OPERATIONS - Apply operations (trash, label, archive) to emails based on AI analysis patterns with confidence filtering",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "job_id": {
+                    "type": "string",
+                    "description": "Job ID from a completed damien_ai_analyze_emails_async analysis"
+                },
+                "operation": {
+                    "type": "string",
+                    "enum": ["trash", "label", "archive", "mark_read"],
+                    "default": "trash",
+                    "description": "Operation to perform on matched emails"
+                },
+                "pattern_filter": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Filter by pattern types (e.g., ['newsletter_subscriptions', 'job_alerts']). Empty array = all patterns"
+                },
+                "min_confidence": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 0.85,
+                    "description": "Minimum confidence threshold for patterns (default: 0.85)"
+                },
+                "max_emails": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000,
+                    "default": 100,
+                    "description": "Maximum number of emails to process (default: 100)"
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Dry run mode - show what would be done without executing (default: true)"
+                },
+                "additional_params": {
+                    "type": "object",
+                    "description": "Additional parameters for operations (e.g., label_names for labeling)",
+                    "properties": {
+                        "label_names": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Label names to apply (for label operation)"
+                        }
+                    }
+                }
+            },
+            "required": ["job_id"]
+        },
+        handler="damien_ai_bulk_operations"
+    )
+    tool_registry.register_tool(tool_def6, damien_ai_bulk_operations_handler)
+    
+    logger.info("✅ Successfully registered 6 async job processing tools")
 
 
 # Export registration function
