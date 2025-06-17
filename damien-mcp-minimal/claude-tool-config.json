@@ -1,0 +1,36 @@
+{
+  "tool_usage_policy": {
+    "priority": "mcp_tools_first",
+    "fallback": "api_calls_only_on_failure",
+    "enforcement_level": "strict"
+  },
+  "available_tools": [
+    {
+      "name": "damien_list_emails",
+      "type": "mcp_tool",
+      "priority": 1,
+      "required_parameters": ["query"],
+      "optional_parameters": ["max_results", "include_headers", "page_token"],
+      "fallback_method": "curl_api_call",
+      "use_fallback_when": ["tool_error", "timeout", "unavailable"]
+    },
+    {
+      "name": "damien_get_email_details", 
+      "type": "mcp_tool",
+      "priority": 1,
+      "fallback_method": "curl_api_call"
+    },
+    {
+      "name": "damien_create_draft",
+      "type": "mcp_tool", 
+      "priority": 1,
+      "fallback_method": "curl_api_call"
+    }
+  ],
+  "enforcement_rules": {
+    "always_try_mcp_first": true,
+    "only_fallback_on_error": true,
+    "log_fallback_usage": true,
+    "warn_on_api_usage": true
+  }
+}

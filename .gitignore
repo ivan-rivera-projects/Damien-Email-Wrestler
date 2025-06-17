@@ -23,6 +23,11 @@ token.json
 **/data/token.json
 refresh_token.json
 
+# Configuration Files with Secrets (CRITICAL)
+CLAUDE.md
+**/.env
+.env.*
+
 # API Keys and Secrets
 *.key
 *.pem
