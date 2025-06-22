@@ -1,4 +1,4 @@
-# Damien MCP Server v4.1
+# Damien MCP Server v0.4.2
 
 **Hybrid AI Email Intelligence Platform** - MCP Server for Damien-CLI functionalities with AWS Lambda enhancement. This server enables AI assistants like Claude to interact with Damien's email management capabilities through the MCP protocol.
 
@@ -23,7 +23,7 @@ The Damien MCP Server acts as a bridge between AI assistants and the Damien-CLI 
 - **Secure Authentication**: Uses existing Damien-CLI token-based authentication with Gmail
 - **Smithery SDK Integration**: Can be integrated with Smithery SDK for enhanced discovery and standardized MCP compliance
 
-### Recent Major Updates (v4.1)
+### Recent Major Updates (v0.4.2)
 
 🚀 **Hybrid AI Architecture Implementation** - Major platform evolution with:
 - **AWS Lambda Integration**: Enterprise-grade AI processing with metadata-only storage

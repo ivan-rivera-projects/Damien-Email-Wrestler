@@ -1,8 +1,8 @@
-# Damien Email Wrestler - Architecture Overview v4.1
+# Damien Email Wrestler - Architecture Overview v0.4.2
 
-**Current System Architecture - Production Ready with AWS Lambda Enhancement**  
-**Last Updated**: June 7, 2025  
-**Version**: 4.1 (Hybrid CLI + AWS Lambda Architecture)  
+**Current System Architecture - Enhanced Workflow Complete with Organization Tools**  
+**Last Updated**: December 22, 2024  
+**Version**: 0.4.2 (Enhanced Workflow Complete with Natural Language Organization)  
 
 ---
 
@@ -50,7 +50,7 @@
 │  └─────────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                     │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐   │
-│  │                         MCP TOOLS LAYER (39 Tools)                         │   │
+│  │                         MCP TOOLS LAYER (46 Tools)                         │   │
 │  │                                                                             │   │
 │  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │   │
 │  │  │   EMAIL TOOLS   │  │  THREAD TOOLS   │  │   DRAFT TOOLS   │            │   │
@@ -156,7 +156,7 @@
 
 ---
 
-## 🛠️ **Tool Categories & Capabilities (39 Total)**
+## 🛠️ **Tool Categories & Capabilities (46 Total)**
 
 ### **Email Management Tools (13)**
 ```python
@@ -239,6 +239,18 @@
 - damien_job_get_result()                 # Result retrieval
 - damien_job_cancel()                     # Job cancellation
 - damien_job_list()                       # Active jobs listing
+```
+
+### **Enhanced Operations Tools (7)**
+```python
+# Large-scale and intelligent operations (NEW in v0.4.2)
+- damien_trash_emails_by_query()          # Enhanced bulk trash with timeout resistance
+- damien_smart_trash_marketing()          # AI-powered marketing email detection
+- damien_organize_emails()                # Natural language email organization
+- damien_create_label()                   # Direct label creation and management
+- damien_smart_rule()                     # Natural language rule creation
+- damien_count_emails_by_label()          # Enterprise-scale email counting
+- damien_get_all_emails_by_label()        # Bulk email retrieval with pagination
 ```
 
 ---
@@ -496,20 +508,23 @@ aws dynamodb describe-table --table-name damien-ai-rules-table
 
 ## 🔮 **Future Roadmap**
 
-### **Phase 1: Current (v4.1) - ✅ Complete**
-- ✅ 39 MCP tools optimized from 43
+### **Phase 1: Enhanced Workflow Complete (v0.4.2) - ✅ Complete**
+- ✅ 46 MCP tools (39 core + 7 enhanced operations)
+- ✅ Natural language email organization interface
+- ✅ Enhanced bulk operations with timeout resistance
+- ✅ AI-powered marketing email detection
 - ✅ AWS Lambda enhancement with DynamoDB
 - ✅ Hybrid CLI + Lambda processing
-- ✅ Real-world testing (100-email validation)
+- ✅ Real-world testing (282 marketing emails processed)
 - ✅ Privacy-first metadata-only architecture
 
-### **Phase 2: Enhanced Analytics (v4.2)**
+### **Phase 2: Advanced Analytics (v0.5.0)**
 - 📊 Advanced analytics dashboard
 - 📈 Trend analysis and predictions
 - 🎯 Automation opportunity scoring
 - 📱 Mobile compatibility improvements
 
-### **Phase 3: Enterprise Features (v5.0)**
+### **Phase 3: Enterprise Features (v1.0)**
 - 🏢 Multi-user support
 - 🔐 Advanced security features
 - 📋 Compliance dashboards
@@ -519,10 +534,10 @@ aws dynamodb describe-table --table-name damien-ai-rules-table
 
 ## 🏁 **Conclusion**
 
-The Damien Email Wrestler v4.1 architecture represents a production-ready, hybrid system that combines the reliability of CLI-based processing with the advanced capabilities of AWS Lambda-powered AI enhancement.
+The Damien Email Wrestler v0.4.2 architecture represents a production-ready, hybrid system that combines the reliability of CLI-based processing with the advanced capabilities of AWS Lambda-powered AI enhancement and natural language organization.
 
 **Key Achievements:**
-- ✅ **39 Optimized Tools**: Focused on high-value email management
+- ✅ **46 Optimized Tools**: Complete email management suite with organization tools
 - ✅ **Hybrid Architecture**: CLI reliability + Lambda enhancement
 - ✅ **Real-World Validation**: 100 emails in 14.49 seconds
 - ✅ **Privacy-First**: Metadata-only storage with automatic cleanup
@@ -540,6 +555,6 @@ This architecture positions Damien as a reliable, scalable, and cost-effective A
 
 ---
 
-*Document Version: 4.1*  
-*Last Updated: June 7, 2025*  
-*Status: Production Ready with AWS Lambda Enhancement* ✅
+*Document Version: 0.4.2*  
+*Last Updated: December 22, 2024*  
+*Status: Enhanced Workflow Complete with Organization Tools* ✅

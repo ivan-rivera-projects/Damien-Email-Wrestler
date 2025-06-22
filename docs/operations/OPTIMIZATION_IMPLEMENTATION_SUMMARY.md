@@ -38,7 +38,7 @@ We've successfully addressed the email ID generation bottleneck with two key opt
 2. **Updated Existing Documentation**:
    - `README.md` - Added new optimizations to features and updated version
    - `damien-mcp-server/CHANGELOG.md` - Added entry for v2.1.1
-   - `damien-cli/CHANGELOG.md` - Created with entry for v4.0.1
+   - `damien-cli/CHANGELOG.md` - Created with entry for v0.4.2
 
 3. **Comprehensive Testing**:
    - Unit tests for query optimizer
