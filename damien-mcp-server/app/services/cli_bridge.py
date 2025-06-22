@@ -1216,10 +1216,23 @@ class CLIBridge:
                 batch_count = 0
                 
                 # Build query string with date filter
+                # 🔧 BUGFIX: Check if query already contains date filters (after: or before:)
+                # If so, don't add conflicting newer_than filter
                 if query:
-                    full_query = f"{query} newer_than:{days}d"
+                    has_date_filter = 'after:' in query.lower() or 'before:' in query.lower()
+                    if has_date_filter:
+                        full_query = query  # Use explicit date filters as-is
+                        logger.info(f"Using explicit date filters in query: {query}")
+                    else:
+                        # Convert days to after: format for consistency with rule management
+                        from datetime import datetime, timedelta
+                        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y/%m/%d")
+                        full_query = f"{query} after:{start_date}"
                 else:
-                    full_query = f"newer_than:{days}d"
+                    # Convert days to after: format for consistency 
+                    from datetime import datetime, timedelta
+                    start_date = (datetime.now() - timedelta(days=days)).strftime("%Y/%m/%d")
+                    full_query = f"after:{start_date}"
                 
                 logger.info(f"Fetching up to {max_emails} emails with query: {full_query}")
                 
@@ -1288,8 +1301,25 @@ class CLIBridge:
             if not emails:
                 return {"patterns": [], "success": False, "reason": "no_emails_provided"}
             
-            # Generate cache key based on email IDs and parameters
-            email_ids = [e.get('id', e.get('Id', '')) for e in emails if e.get('id') or e.get('Id')]
+            # 🔧 BUGFIX: Enhanced email ID extraction with comprehensive logging
+            logger.info(f"🔍 DIAGNOSTIC: Processing {len(emails)} emails for pattern analysis")
+            if emails:
+                logger.info(f"🔍 DIAGNOSTIC: First email structure: {list(emails[0].keys()) if emails[0] else 'Empty'}")
+            
+            # Extract email IDs with proper error handling and logging
+            email_ids = []
+            missing_id_count = 0
+            for i, email in enumerate(emails):
+                email_id = email.get('id', email.get('Id', ''))
+                if email_id:
+                    email_ids.append(email_id)
+                else:
+                    missing_id_count += 1
+                    if missing_id_count <= 3:  # Log first 3 missing IDs for debugging
+                        logger.warning(f"🔍 DIAGNOSTIC: Email {i} missing ID field. Available fields: {list(email.keys())}")
+            
+            logger.info(f"🔍 DIAGNOSTIC: Extracted {len(email_ids)} email IDs, {missing_id_count} emails missing IDs")
+            
             cache_params = {
                 "email_ids": sorted(email_ids),
                 "min_confidence": min_confidence,
@@ -1305,6 +1335,25 @@ class CLIBridge:
             
             logger.info(f"🔍 Cache MISS: Analyzing {len(emails)} emails for patterns (min_confidence: {min_confidence})")
             
+            # 🔧 BUGFIX: Helper function to safely extract email IDs with logging
+            def extract_email_ids(email_list, pattern_name="unknown"):
+                """Safely extract email IDs from a list of emails with comprehensive logging."""
+                ids = []
+                missing_count = 0
+                for email in email_list:
+                    email_id = email.get('id', email.get('Id', ''))
+                    if email_id:
+                        ids.append(email_id)
+                    else:
+                        missing_count += 1
+                
+                logger.info(f"🔍 DIAGNOSTIC: Pattern '{pattern_name}': {len(ids)} valid IDs extracted, {missing_count} missing IDs")
+                if len(ids) == 0 and len(email_list) > 0:
+                    logger.error(f"🔍 DIAGNOSTIC: CRITICAL - Pattern '{pattern_name}': No email IDs extracted from {len(email_list)} emails!")
+                    logger.error(f"🔍 DIAGNOSTIC: Sample email structure: {list(email_list[0].keys()) if email_list else 'None'}")
+                
+                return ids
+            
             # REAL ANALYSIS: Analyze actual email content and metadata
             patterns = []
             
@@ -1317,18 +1366,19 @@ class CLIBridge:
                 if any(keyword in subject or keyword in snippet for keyword in meeting_keywords):
                     meeting_emails.append(email)
             
-            if len(meeting_emails) >= 2:  # Lower threshold for pattern detection
+            if len(meeting_emails) >= 1:  # 🔧 BUGFIX: Detect single emails, not just patterns
+                meeting_email_ids = extract_email_ids(meeting_emails, "meeting_emails")
                 patterns.append({
                     "pattern_type": "meeting_emails",
                     "email_count": len(meeting_emails),
                     "confidence": min(0.95, 0.80 + (len(meeting_emails) / len(emails) * 0.15)),
                     "description": f"Meeting invitations and calendar events ({len(meeting_emails)} emails)",
                     "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in meeting_emails[:3]],
-                    "email_ids": [e.get('id', e.get('Id', '')) for e in meeting_emails if e.get('id') or e.get('Id')]
+                    "email_ids": meeting_email_ids
                 })
             
             # Pattern 2: Newsletter/Marketing emails (improved detection)
-            newsletter_indicators = ['unsubscribe', 'newsletter', 'marketing', 'promotion', 'sale', 'offer', 'deal', '%', 'discount', 'alert', 'notification']
+            newsletter_indicators = ['unsubscribe', 'newsletter', 'marketing', 'promotion', 'sale', 'offer', 'deal', '%', 'discount', 'alert', 'notification', 'report', 'advanced', 'business', 'analytics', 'insights', 'service', 'hosting', 'account', 'invoice', 'statement', 'dashboard', 'webinar', 'update', 'summary', 'digest', 'daily', 'weekly', 'monthly']
             marketing_domains = ['marketing.', 'newsletter.', 'news.', 'hello@', 'noreply', 'no-reply', 'alerts@', 'jobalerts', 'notifications@']
             unsubscribe_emails = []
             
@@ -1346,14 +1396,15 @@ class CLIBridge:
                 if has_unsubscribe_header or has_marketing_domain or has_marketing_keywords:
                     unsubscribe_emails.append(email)
             
-            if len(unsubscribe_emails) >= 2:
+            if len(unsubscribe_emails) >= 1:  # 🔧 BUGFIX: Detect single marketing emails
+                newsletter_email_ids = extract_email_ids(unsubscribe_emails, "newsletter_subscriptions")
                 patterns.append({
                     "pattern_type": "newsletter_subscriptions", 
                     "email_count": len(unsubscribe_emails),
                     "confidence": min(0.95, 0.80 + (len(unsubscribe_emails) / len(emails) * 0.15)),
                     "description": f"Newsletter and marketing emails ({len(unsubscribe_emails)} emails)",
                     "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in unsubscribe_emails[:3]],
-                    "email_ids": [e.get('id', e.get('Id', '')) for e in unsubscribe_emails if e.get('id') or e.get('Id')]
+                    "email_ids": newsletter_email_ids
                 })
             
             # Pattern 3: Job alerts and notifications  
@@ -1372,17 +1423,39 @@ class CLIBridge:
                 if has_job_keywords or has_job_domain:
                     job_emails.append(email)
             
-            if len(job_emails) >= 2:
+            if len(job_emails) >= 1:  # 🔧 BUGFIX: Detect single job alerts
+                job_email_ids = extract_email_ids(job_emails, "job_alerts")
                 patterns.append({
                     "pattern_type": "job_alerts",
                     "email_count": len(job_emails),
                     "confidence": min(0.95, 0.80 + (len(job_emails) / len(emails) * 0.15)),
                     "description": f"Job alerts and career opportunities ({len(job_emails)} emails)",
                     "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in job_emails[:3]],
-                    "email_ids": [e.get('id', e.get('Id', '')) for e in job_emails if e.get('id') or e.get('Id')]
+                    "email_ids": job_email_ids
                 })
             
-            # Pattern 4: Automated system emails
+            # Pattern 4: Business reports and analytics (NEW PATTERN)
+            report_keywords = ['report', 'analytics', 'insights', 'dashboard', 'summary', 'daily', 'weekly', 'monthly', 'performance', 'metrics', 'advanced', 'look', 'digest']
+            report_emails = []
+            for email in emails:
+                subject = email.get('Subject', email.get('subject', '')).lower()
+                sender = email.get('From', email.get('from', '')).lower()
+                if (any(keyword in subject for keyword in report_keywords) or
+                    'report' in sender or 'analytics' in sender or 'mipler' in sender):
+                    report_emails.append(email)
+            
+            if len(report_emails) >= 1:  # 🔧 BUGFIX: Detect single business reports
+                report_email_ids = extract_email_ids(report_emails, "business_reports")
+                patterns.append({
+                    "pattern_type": "business_reports",
+                    "email_count": len(report_emails),
+                    "confidence": min(0.90, 0.75 + (len(report_emails) / len(emails) * 0.15)),
+                    "description": f"Business reports and analytics ({len(report_emails)} emails)",
+                    "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in report_emails[:3]],
+                    "email_ids": report_email_ids
+                })
+
+            # Pattern 5: Automated system emails
             system_keywords = ['noreply', 'no-reply', 'notification', 'alert', 'automated', 'system', 'support', 'account', 'security', 'update']
             system_emails = []
             for email in emails:
@@ -1392,17 +1465,18 @@ class CLIBridge:
                     any(keyword in subject for keyword in ['notification', 'alert', 'update', 'security', 'account'])):
                     system_emails.append(email)
             
-            if len(system_emails) >= 2:
+            if len(system_emails) >= 1:  # 🔧 BUGFIX: Detect single system notifications
+                system_email_ids = extract_email_ids(system_emails, "system_notifications")
                 patterns.append({
                     "pattern_type": "system_notifications",
                     "email_count": len(system_emails),
                     "confidence": min(0.88, 0.6 + (len(system_emails) / len(emails) * 0.35)),
                     "description": f"Automated system notifications ({len(system_emails)} emails)",
                     "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in system_emails[:3]],
-                    "email_ids": [e.get('id', e.get('Id', '')) for e in system_emails if e.get('id') or e.get('Id')]
+                    "email_ids": system_email_ids
                 })
             
-            # Pattern 5: Domain analysis (professional communications)
+            # Pattern 6: Domain analysis (professional communications)
             domain_groups = {}
             for email in emails:
                 sender = email.get('From', email.get('from', ''))
@@ -1425,6 +1499,7 @@ class CLIBridge:
                 if (len(domain_emails) >= 3 and 
                     domain not in excluded_domains and 
                     len(domain) > 3):  # Avoid very short/invalid domains
+                    domain_email_ids = extract_email_ids(domain_emails, f"domain_communications_{domain}")
                     patterns.append({
                         "pattern_type": "domain_communications",
                         "email_count": len(domain_emails),
@@ -1432,7 +1507,7 @@ class CLIBridge:
                         "description": f"Regular communications from {domain} ({len(domain_emails)} emails)",
                         "domain": domain,
                         "representative_emails": [e.get('Subject', e.get('subject', 'No subject'))[:60] for e in domain_emails[:3]],
-                        "email_ids": [e.get('id', e.get('Id', '')) for e in domain_emails if e.get('id') or e.get('Id')]
+                        "email_ids": domain_email_ids
                     })
             
             # Filter by confidence threshold
@@ -1443,8 +1518,18 @@ class CLIBridge:
             coverage_percentage = (total_pattern_emails / len(emails)) * 100 if emails else 0
             
             logger.info(f"✅ Found {len(high_confidence_patterns)} high-confidence patterns covering {coverage_percentage:.1f}% of emails")
+            total_email_ids_found = 0
             for pattern in high_confidence_patterns:
-                logger.info(f"   📊 {pattern['pattern_type']}: {pattern['email_count']} emails (confidence: {pattern['confidence']:.2f})")
+                email_ids_count = len(pattern.get('email_ids', []))
+                total_email_ids_found += email_ids_count
+                logger.info(f"   📊 {pattern['pattern_type']}: {pattern['email_count']} emails, {email_ids_count} email IDs (confidence: {pattern['confidence']:.2f})")
+            
+            logger.info(f"🔍 DIAGNOSTIC: Total email IDs across all patterns: {total_email_ids_found}")
+            if total_email_ids_found == 0 and len(high_confidence_patterns) > 0:
+                logger.error(f"🔍 DIAGNOSTIC: CRITICAL BUG - Found {len(high_confidence_patterns)} patterns but 0 email IDs total!")
+                logger.error(f"🔍 DIAGNOSTIC: Sample pattern structure: {high_confidence_patterns[0] if high_confidence_patterns else 'None'}")
+            elif total_email_ids_found > 0:
+                logger.info(f"🔍 DIAGNOSTIC: Email ID extraction SUCCESS - {total_email_ids_found} IDs ready for bulk operations")
             
             result = {
                 "patterns": high_confidence_patterns,
