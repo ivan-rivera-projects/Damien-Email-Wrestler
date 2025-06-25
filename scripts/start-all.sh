@@ -32,9 +32,19 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Run the environment synchronization script first
+# Run the environment synchronization script first (if exists)
 echo "Synchronizing environment variables..."
-./scripts/sync-env.sh
+if [ -f "./scripts/sync-env.sh" ]; then
+    ./scripts/sync-env.sh
+else
+    echo "⚠️  Note: sync-env.sh not found, skipping environment sync"
+fi
+
+# Sync Claude Code MCP configuration with .env file
+echo "🔄 Ensuring Claude Code MCP configuration is current..."
+if ! ./scripts/sync-claude-mcp-config.sh; then
+    echo "⚠️  Warning: Failed to sync Claude MCP config, proceeding anyway..."
+fi
 
 # Ensure TypeScript compilation is up to date for Smithery Adapter
 echo "Checking TypeScript compilation for Smithery Adapter..."
