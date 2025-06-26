@@ -14,7 +14,7 @@ mkdir -p "$LOGS_DIR"
 # Set strict environment variables with fixed naming for Claude MAX  
 export DAMIEN_MCP_SERVER_URL="http://localhost:8893"
 export DAMIEN_BACKEND_URL="http://localhost:8892"
-export DAMIEN_MCP_SERVER_API_KEY="7e508adf3ccf8b9376c312df8cebd488f3988f310afbdf5077d5d3ce63ed7c8f"
+export DAMIEN_MCP_SERVER_API_KEY="${DAMIEN_MCP_SERVER_API_KEY:-2cce28d6432ac936fba9bdb124059c1b034a9858fe22ce4d3e367136b5b251c7}"
 export SERVER_NAME="Damien_Email_Wrestler" # Underscores instead of spaces
 export SERVER_VERSION="2.0.0"
 export NODE_ENV="production"

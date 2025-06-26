@@ -11,7 +11,7 @@ Damien Email Wrestler is an **enterprise-grade AI email intelligence platform** 
 ## ✨ **Current Status: Enhanced Workflow Complete v0.4.2** 🎉
 
 ### **🏆 Complete AI Email Intelligence Platform with Natural Language Interface**
-- **46 Optimized Tools**: Enhanced email management suite with natural language organization
+- **48 Optimized Tools**: Enhanced email management suite with natural language organization
 - **✅ ENHANCED WORKFLOW VALIDATED**: 282 marketing emails processed with 100% precision across production tests
 - **Hybrid Architecture**: CLI reliability + AWS Lambda AI enhancement when configured
 - **Real-World Tested**: 100-500 emails analyzed with 83-86% confidence pattern detection
@@ -100,7 +100,7 @@ Damien Email Wrestler consists of integrated components with hybrid CLI + AWS La
 ### **Component Breakdown**
 
 #### **🤖 Damien MCP Server (Port 8892)**
-- **39 Optimized MCP Tools**: Focused email management toolkit following Pareto principle
+- **48 Optimized MCP Tools**: Focused email management toolkit following Pareto principle
 - **Hybrid Processing**: Standard CLI analysis + AWS Lambda AI enhancement (when configured)
 - **Graceful Fallback**: Full functionality without AWS - Lambda enhances but never required
 - **FastAPI Backend**: High-performance async API with comprehensive monitoring
@@ -346,7 +346,7 @@ tail -f logs/token_usage.json               # Cost tracking logs
 
 ### **🚀 For Developers**
 - **MCP Protocol**: Standard integration with AI assistants
-- **Extensible**: 39 tools with easy customization options
+- **Extensible**: 48 tools with easy customization options
 - **AWS Integration**: Serverless Lambda functions with DynamoDB storage
 - **Hybrid Architecture**: CLI + Cloud processing for optimal performance
 - **Enterprise Ready**: Production-grade architecture and monitoring
@@ -360,7 +360,7 @@ tail -f logs/token_usage.json               # Cost tracking logs
 - ✅ **PRODUCTION VALIDATED**: 282 marketing emails processed with 100% precision across test scales
 - ✅ **Smart Caching**: LRU/LFU eviction with TTL optimization for repeat operations
 - ✅ **Async Job Processing**: Seamless handling of large datasets with real-time progress tracking
-- ✅ Enhanced MCP tool suite (46 tools total: 39 core + 2 enhanced trash + 5 organization tools)
+- ✅ Enhanced MCP tool suite (48 tools total: 39 core + 2 enhanced trash + 5 organization tools + 2 smart cleanup tools)
 - ✅ Hybrid CLI + AWS Lambda AI enhancement architecture
 - ✅ Privacy-first metadata-only storage with TTL cleanup
 - ✅ Real-world validation: 100-500 emails with 83-86% confidence pattern detection

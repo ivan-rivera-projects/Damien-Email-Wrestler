@@ -437,7 +437,9 @@ async def execute_tool_endpoint(
                            "damien_trash_emails_by_query", "damien_smart_trash_marketing",
                            # Organization tools added here
                            "damien_create_label", "damien_delete_label", "damien_list_labels",
-                           "damien_smart_rule", "damien_organize_emails"]:
+                           "damien_smart_rule", "damien_organize_emails",
+                           # Smart cleanup tools added here
+                           "damien_smart_cleanup", "damien_execute_cleanup"]:
             try:
                 # Import tool registry to get the handler
                 from ..services.tool_registry import tool_registry

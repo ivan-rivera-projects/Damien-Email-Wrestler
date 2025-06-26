@@ -41,6 +41,7 @@ from .tools.thread_tools import register_thread_tools
 from .tools.register_ai_intelligence import register_ai_intelligence_tools
 from .tools.async_tools import register_async_tools
 from .tools.enhanced_trash_tool import register_enhanced_trash_tools
+from .tools.smart_cleanup_tools import register_smart_cleanup_tools
 from .services.tool_registry import tool_registry
 
 @app.on_event("startup")
@@ -62,6 +63,14 @@ async def startup_event():
     register_async_tools()  # 🔥 Background Job Processing Tools
     register_enhanced_trash_tools()  # 🗑️ Enhanced Trash Operations
     
+    # Register smart cleanup tools
+    logger.info("🧹 Registering smart cleanup tools...")
+    try:
+        register_smart_cleanup_tools()
+        logger.info("✅ Smart cleanup tools registration completed")
+    except Exception as e:
+        logger.error(f"❌ Smart cleanup tools registration failed: {e}", exc_info=True)
+    
     # Register organization tools
     logger.info("📁 Registering organization tools...")
     try:
@@ -75,6 +84,7 @@ async def startup_event():
     logger.info("✅ Phase 4 AI Intelligence integration complete!")
     logger.info("🚀 Background job processing system active!")
     logger.info("🗑️ Enhanced trash operations available!")
+    logger.info("🧹 Smart cleanup workflow ready!")
     logger.info("📁 Smart organization tools ready!")
 
 
