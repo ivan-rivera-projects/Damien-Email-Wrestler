@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/ivan-rivera-projects-damien-email-wrestler-badge.png)](https://mseep.ai/app/ivan-rivera-projects-damien-email-wrestler)
+
 # 🤼‍♂️ Damien Email Wrestler
 
 **The AI-Powered Email Intelligence Platform**
