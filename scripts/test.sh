@@ -66,7 +66,7 @@ else
     test_failed "Environment file missing"
 fi
 
-if [ -f "credentials.json" ]; then
+if [ -f "damien-cli/credentials.json" ] && [ -f "damien-cli/data/token.json" ]; then
     test_passed "Gmail credentials exist"
 else
     test_failed "Gmail credentials missing"
