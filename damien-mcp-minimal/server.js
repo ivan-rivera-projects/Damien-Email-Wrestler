@@ -487,6 +487,55 @@ class MinimalDamienMCP {
         return;
       }
       
+      // Handle simplified /call_tool endpoint (for compatibility)
+      if (path === '/call_tool') {
+        // Verify API key
+        const apiKey = req.headers['x-api-key'];
+        if (apiKey !== CONFIG.API_KEY) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid API key' }));
+          return;
+        }
+        
+        // Parse request body for tool name and parameters
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk.toString();
+        });
+        
+        req.on('end', async () => {
+          try {
+            // Parse parameters from body
+            const requestData = body ? JSON.parse(body) : {};
+            this.log(`Raw request body for call_tool: ${body}`);
+            
+            const toolName = requestData.name;
+            const toolParams = requestData.arguments || {};
+            
+            this.log(`Direct tool execution: call_tool with params: ${JSON.stringify(requestData)}`);
+            
+            // Validate tool name
+            if (!toolName) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Tool name is required' }));
+              return;
+            }
+            
+            // Execute the tool
+            const result = await this.damienClient.executeTool(toolName, toolParams);
+            
+            // Return result
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (error) {
+            this.logError(`Error executing tool via call_tool`, error);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message }));
+          }
+        });
+        return;
+      }
+      
       // Handle direct tool execution endpoints (e.g., /mcp/damien_list_emails)
       const toolMatch = path.match(/^\/mcp\/([a-zA-Z0-9_]+)$/);
       if (toolMatch) {

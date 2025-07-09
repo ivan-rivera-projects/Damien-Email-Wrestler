@@ -136,7 +136,7 @@ class EnhancedBaseModel(BaseModel):
     def __setattr__(self, name: str, value: Any) -> None:
         """Override to track updates"""
         super().__setattr__(name, value)
-        if hasattr(self, 'created_at') and name != 'updated_at':
+        if hasattr(self, 'created_at') and name not in ('updated_at', 'created_at', 'version', 'metadata'):
             object.__setattr__(self, 'updated_at', datetime.now(timezone.utc))
     
     @computed_field

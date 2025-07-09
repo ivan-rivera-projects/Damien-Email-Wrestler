@@ -55,7 +55,7 @@ export const CONFIG = {
   SERVER_PORT: parseInt(process.env.DAMIEN_MCP_MINIMAL_PORT || '8893', 10),
   
   // Request timeouts and retries
-  DEFAULT_TIMEOUT: parseInt(process.env.DAMIEN_DEFAULT_TIMEOUT || '30000', 10), // 30 seconds
+  DEFAULT_TIMEOUT: parseInt(process.env.DAMIEN_DEFAULT_TIMEOUT || '120000', 10), // 120 seconds
   HEALTH_CHECK_TIMEOUT: parseInt(process.env.DAMIEN_HEALTH_CHECK_TIMEOUT || '5000', 10), // 5 seconds
   MAX_RETRIES: parseInt(process.env.DAMIEN_MAX_RETRIES || '3', 10),
   RETRY_DELAY: parseInt(process.env.DAMIEN_RETRY_DELAY || '1000', 10), // 1 second
