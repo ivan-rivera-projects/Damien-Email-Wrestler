@@ -3,7 +3,7 @@ name: Claude Code Action
 on:
   workflow_dispatch:
     inputs:
-      instructions:
+      direct_prompt:
         description: 'Instructions for Claude'
         required: true
         type: string
@@ -20,5 +20,5 @@ jobs:
       - name: Claude Code Action
         uses: anthropics/claude-code-action@v0.0.33
         with:
-          instructions: ${{ github.event.inputs.instructions }}
+          direct_prompt: ${{ github.event.inputs.direct_prompt }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
