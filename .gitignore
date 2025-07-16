@@ -259,4 +259,4 @@ docker-compose.local.yml
 k8s-secrets.yml
 terraform.tfstate
 terraform.tfstate.backup
-.terraform/
+.terraform/all_files.txt
