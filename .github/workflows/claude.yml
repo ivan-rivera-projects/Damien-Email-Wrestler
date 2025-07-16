@@ -1,0 +1,24 @@
+name: Claude Code Action
+
+on:
+  workflow_dispatch:
+    inputs:
+      instructions:
+        description: 'Instructions for Claude'
+        required: true
+        type: string
+
+jobs:
+  claude:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Claude Code Action
+        uses: anthropics/claude-code-action@v1
+        with:
+          instructions: ${{ github.event.inputs.instructions }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
