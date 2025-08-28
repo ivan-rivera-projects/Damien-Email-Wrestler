@@ -24,10 +24,7 @@ poetry.lock # Some people commit this, some don't. For an app, it's good to comm
 credentials.json
 data/token.json
 data/*.log
-# credentials.json # IMPORTANT: You will add credentials.json to this list
-                   # AFTER you ensure your private repo setup or alternative secret management.
-                   # For now, IF THIS IS A PRIVATE REPO, you can omit this line.
-                   # IF IT'S PUBLIC, ADD `credentials.json` HERE IMMEDIATELY.
+# Sensitive data - NEVER commit these to public repos
 
 # IDE / Editor specific
 .vscode/
