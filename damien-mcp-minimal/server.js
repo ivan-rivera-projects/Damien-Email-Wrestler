@@ -251,6 +251,53 @@ class MinimalDamienMCP {
   }
 
   /**
+   * Process arguments to handle Claude Code's JSON string marshaling.
+   * This fixes the parameter marshaling issue between Claude Code and Claude Desktop.
+   *
+   * Claude Code often sends arrays and objects as JSON strings, while Claude Desktop
+   * sends them as actual arrays/objects. This function normalizes both formats.
+   *
+   * @param {Object} args - The arguments object from the MCP request
+   * @returns {Object} Processed arguments with JSON strings converted to proper types
+   */
+  processArguments(args) {
+    if (!args || typeof args !== 'object') {
+      return {};
+    }
+
+    const processed = {};
+
+    for (const [key, value] of Object.entries(args)) {
+      // Handle JSON string arrays (e.g., "[\"From\",\"Subject\"]")
+      if (typeof value === 'string' && value.startsWith('[') && value.endsWith(']')) {
+        try {
+          processed[key] = JSON.parse(value);
+          this.log(`Parsed JSON array for parameter '${key}': ${value}`);
+        } catch (e) {
+          this.logError(`Failed to parse array string for ${key}: ${value}`, e);
+          processed[key] = value; // Keep original value if parsing fails
+        }
+      }
+      // Handle JSON string objects (e.g., "{\"key\":\"value\"}")
+      else if (typeof value === 'string' && value.startsWith('{') && value.endsWith('}')) {
+        try {
+          processed[key] = JSON.parse(value);
+          this.log(`Parsed JSON object for parameter '${key}': ${value}`);
+        } catch (e) {
+          this.logError(`Failed to parse object string for ${key}: ${value}`, e);
+          processed[key] = value; // Keep original value if parsing fails
+        }
+      }
+      // Pass through all other values unchanged
+      else {
+        processed[key] = value;
+      }
+    }
+
+    return processed;
+  }
+
+  /**
    * Set up MCP request handlers
    */
   setupRequestHandlers() {
@@ -305,7 +352,7 @@ class MinimalDamienMCP {
       const requestId = `call_tool_${name}_${Date.now()}`;
       const startTime = Date.now();
       let hasError = false;
-      
+
       try {
         this.logRequest(requestId, `CallTool:${name}`, 'start', { params });
         this.requestStats.callTool.total++;
@@ -313,13 +360,17 @@ class MinimalDamienMCP {
 
         // Update per-tool statistics (bounded LRU cache)
         this.requestStats.callTool.byTool.update(name, false);
-        
+
         // All tools are available - backend will validate tool existence
         this.log(`Executing tool: ${name}`);
-        
+
+        // FIX: Process arguments to handle Claude Code's JSON string marshaling
+        // This normalizes parameters between Claude Code and Claude Desktop
+        const processedParams = this.processArguments(params);
+
         // Validate tool arguments based on schema
         // This will be done by executing the tool and handling any validation errors
-        
+
         // Set up timeout for tool execution
         const timeoutPromise = new Promise((_, reject) => {
           const toolTimeout = setTimeout(() => {
@@ -327,10 +378,10 @@ class MinimalDamienMCP {
             reject(new Error(`Tool execution timed out after ${CONFIG.DEFAULT_TIMEOUT}ms`));
           }, CONFIG.DEFAULT_TIMEOUT);
         });
-        
+
         try {
-          // Execute the tool with timeout
-          const resultPromise = this.damienClient.executeTool(name, params);
+          // Execute the tool with timeout using processed parameters
+          const resultPromise = this.damienClient.executeTool(name, processedParams);
           const result = await Promise.race([resultPromise, timeoutPromise]);
           
           // Record performance metrics
