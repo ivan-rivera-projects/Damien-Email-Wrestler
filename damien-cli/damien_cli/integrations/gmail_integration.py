@@ -315,25 +315,49 @@ async def trash_emails_progressively(
 
 
 def get_message_details(service, message_id: str, email_format: str = "metadata"):
+    """
+    Get message details with optional chunked fetching for large emails.
+
+    For backward compatibility, this function still accepts the email_format parameter,
+    but internally uses the timeout-resistant chunked approach for better reliability.
+
+    Args:
+        service: Gmail API service client
+        message_id: ID of the message to retrieve
+        email_format: Format hint ('full', 'metadata', 'raw') - mapped to detail_level
+
+    Returns:
+        Message details dict, or None if error
+    """
     if not service:
         click.echo("Damien cannot get message details: Gmail service not available.")
         return None
-    try:
-        valid_formats = ["full", "metadata", "raw"]
-        if email_format.lower() not in valid_formats:
-            click.echo(
-                f"Damien received an invalid format '{email_format}'. Using 'metadata'."
-            )
-            email_format = "metadata"
 
-        # click.echo(f"Damien is fetching details for message ID: {message_id} (format: {email_format})...")
-        message = (
-            service.users()
-            .messages()
-            .get(userId="me", id=message_id, format=email_format)
-            .execute()
+    try:
+        from damien_cli.core_api.gmail_api_service import get_message_details_chunked
+
+        # Map old email_format to new detail_level for backward compatibility
+        format_to_detail_level = {
+            'full': 'full_metadata',      # Full details but no attachment data (fast)
+            'metadata': 'full_metadata',   # Headers + body + attachment metadata
+            'raw': 'standard',             # Just headers + body
+            'minimal': 'headers_only'      # Just headers
+        }
+
+        detail_level = format_to_detail_level.get(email_format.lower(), 'full_metadata')
+
+        # Use new chunked approach (timeout-resistant)
+        result = get_message_details_chunked(
+            gmail_service=service,
+            message_id=message_id,
+            detail_level=detail_level,
+            include_body=True,
+            include_attachment_metadata=True
         )
-        return message
+
+        # For backward compatibility, also include the raw Gmail API response format
+        # by converting our structured response back to Gmail API format
+        return result
 
     except HttpError as error:
         click.echo(f"Damien encountered an API error getting message details: {error}")

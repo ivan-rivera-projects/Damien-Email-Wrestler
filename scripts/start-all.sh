@@ -40,10 +40,10 @@ else
     echo "⚠️  Note: sync-env.sh not found, skipping environment sync"
 fi
 
-# Sync Claude Code MCP configuration with .env file
-echo "🔄 Ensuring Claude Code MCP configuration is current..."
+# Sync Claude Desktop MCP configuration with .env file
+echo "🔄 Ensuring Claude Desktop MCP configuration is current..."
 if ! ./scripts/sync-claude-mcp-config.sh; then
-    echo "⚠️  Warning: Failed to sync Claude MCP config, proceeding anyway..."
+    echo "⚠️  Warning: Failed to sync Claude Desktop MCP config, proceeding anyway..."
 fi
 
 # Ensure TypeScript compilation is up to date for Smithery Adapter

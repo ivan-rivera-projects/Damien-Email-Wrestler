@@ -23,13 +23,93 @@ import DamienClient from './core/damien-client.js';
 import { CONFIG, validateConfig, logConfig } from './config/claude-max-config.js';
 import http from 'http';
 
+/**
+ * Bounded LRU cache for tool statistics to prevent memory leaks.
+ * Limits the number of tracked tools and evicts least recently used entries.
+ */
+class BoundedToolStats {
+  constructor(maxSize = 100) {
+    this.maxSize = maxSize;
+    this.stats = new Map(); // Map maintains insertion order
+    this.createdAt = Date.now();
+  }
+
+  /**
+   * Update statistics for a tool (LRU behavior).
+   */
+  update(toolName, incrementErrors = false) {
+    // Get existing stats or create new
+    let toolStats = this.stats.get(toolName);
+
+    if (!toolStats) {
+      // Check if we need to evict
+      if (this.stats.size >= this.maxSize) {
+        // Evict the first (oldest) entry
+        const firstKey = this.stats.keys().next().value;
+        this.stats.delete(firstKey);
+      }
+
+      toolStats = { count: 0, errors: 0, lastUsed: Date.now() };
+    }
+
+    // Update stats
+    toolStats.count++;
+    if (incrementErrors) {
+      toolStats.errors++;
+    }
+    toolStats.lastUsed = Date.now();
+
+    // Delete and re-add to move to end (LRU)
+    this.stats.delete(toolName);
+    this.stats.set(toolName, toolStats);
+  }
+
+  /**
+   * Get statistics for a specific tool.
+   */
+  get(toolName) {
+    return this.stats.get(toolName);
+  }
+
+  /**
+   * Get all statistics as an object (for compatibility).
+   */
+  toObject() {
+    const obj = {};
+    for (const [name, stats] of this.stats.entries()) {
+      obj[name] = { count: stats.count, errors: stats.errors };
+    }
+    return obj;
+  }
+
+  /**
+   * Get cache size and capacity info.
+   */
+  getCapacityInfo() {
+    return {
+      size: this.stats.size,
+      maxSize: this.maxSize,
+      utilization: (this.stats.size / this.maxSize * 100).toFixed(1) + '%',
+      ageSeconds: Math.floor((Date.now() - this.createdAt) / 1000)
+    };
+  }
+
+  /**
+   * Reset all statistics.
+   */
+  reset() {
+    this.stats.clear();
+    this.createdAt = Date.now();
+  }
+}
+
 class MinimalDamienMCP {
   constructor() {
     this.server = null;
     this.transport = null;
     this.damienClient = null;
     this.isShuttingDown = false;
-    
+
     // Cache for tool lists to prevent excessive backend requests
     this.toolsCache = {
       data: null,
@@ -37,8 +117,8 @@ class MinimalDamienMCP {
       isRefreshing: false,
       pendingPromise: null
     };
-    
-    // Request statistics for monitoring
+
+    // Request statistics for monitoring (with bounded tool stats to prevent memory leak)
     this.requestStats = {
       listTools: {
         total: 0,
@@ -48,7 +128,7 @@ class MinimalDamienMCP {
       },
       callTool: {
         total: 0,
-        byTool: {},
+        byTool: new BoundedToolStats(100), // Bounded LRU cache (max 100 tools)
         errors: 0,
         lastRequest: 0
       }
@@ -66,8 +146,42 @@ class MinimalDamienMCP {
     
     // Set up signal handlers for graceful shutdown
     this.setupSignalHandlers();
-    
+
+    // Set up periodic statistics reset to prevent long-term memory accumulation
+    this.setupPeriodicStatsReset();
+
     this.log('Minimal Damien MCP Server initialized');
+  }
+
+  /**
+   * Set up periodic statistics reset (every 24 hours) to prevent unbounded growth.
+   * This is a defense-in-depth measure in addition to the bounded LRU cache.
+   */
+  setupPeriodicStatsReset() {
+    const STATS_RESET_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+
+    this.statsResetInterval = setInterval(() => {
+      try {
+        const oldSize = this.requestStats.callTool.byTool.stats.size;
+        const oldAge = this.requestStats.callTool.byTool.getCapacityInfo().ageSeconds;
+
+        // Reset tool statistics (keeps total counts, just resets per-tool tracking)
+        this.requestStats.callTool.byTool.reset();
+
+        this.log(
+          `Periodic stats reset completed: ` +
+          `cleared ${oldSize} tool entries after ${oldAge}s. ` +
+          `Total requests remain: ${this.requestStats.callTool.total}`
+        );
+      } catch (error) {
+        this.logError('Error during periodic stats reset', error);
+      }
+    }, STATS_RESET_INTERVAL);
+
+    // Don't keep the process alive if this is the only thing running
+    this.statsResetInterval.unref();
+
+    this.log(`Periodic statistics reset enabled (every ${STATS_RESET_INTERVAL / 1000 / 60 / 60} hours)`);
   }
 
   /**
@@ -84,10 +198,10 @@ class MinimalDamienMCP {
       });
       
       this.log('Backend client initialized successfully');
-      
+
     } catch (error) {
       this.logError('Failed to initialize backend client', error);
-      process.exit(1);
+      throw new Error(`Backend client initialization failed: ${error.message}`);
     }
   }
   
@@ -132,7 +246,7 @@ class MinimalDamienMCP {
       this.log('MCP Server initialized successfully');
     } catch (error) {
       this.logError('Failed to initialize MCP server', error);
-      process.exit(1);
+      throw new Error(`MCP server initialization failed: ${error.message}`);
     }
   }
 
@@ -187,7 +301,7 @@ class MinimalDamienMCP {
 
     // Call tool handler - executes tools available in the current phase
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, params } = request.params;
+      const { name, arguments: params } = request.params;
       const requestId = `call_tool_${name}_${Date.now()}`;
       const startTime = Date.now();
       let hasError = false;
@@ -196,12 +310,9 @@ class MinimalDamienMCP {
         this.logRequest(requestId, `CallTool:${name}`, 'start', { params });
         this.requestStats.callTool.total++;
         this.requestStats.callTool.lastRequest = startTime;
-        
-        // Update per-tool statistics
-        if (!this.requestStats.callTool.byTool[name]) {
-          this.requestStats.callTool.byTool[name] = { count: 0, errors: 0 };
-        }
-        this.requestStats.callTool.byTool[name].count++;
+
+        // Update per-tool statistics (bounded LRU cache)
+        this.requestStats.callTool.byTool.update(name, false);
         
         // All tools are available - backend will validate tool existence
         this.log(`Executing tool: ${name}`);
@@ -255,12 +366,10 @@ class MinimalDamienMCP {
         }
       } catch (error) {
         const responseTime = Date.now() - startTime;
-        
-        // Update error statistics
+
+        // Update error statistics (bounded LRU cache)
         this.requestStats.callTool.errors++;
-        if (this.requestStats.callTool.byTool[name]) {
-          this.requestStats.callTool.byTool[name].errors++;
-        }
+        this.requestStats.callTool.byTool.update(name, true); // true = increment errors
         
         // Record performance metrics for the error
         if (hasError) {
@@ -323,7 +432,12 @@ class MinimalDamienMCP {
     this.log('Starting graceful shutdown...');
 
     try {
-      
+      // Clear periodic statistics reset interval
+      if (this.statsResetInterval) {
+        clearInterval(this.statsResetInterval);
+        this.log('Cleared statistics reset interval');
+      }
+
       // Close transport if connected
       if (this.transport) {
         this.log('Closing transport connection');
@@ -359,10 +473,10 @@ class MinimalDamienMCP {
       this.log(`📋 Configuration: Direct backend access`);
       this.log(`🛠️ Available Tools: ${allTools.length} tools`);
       this.log(`🎯 Performance: All tools available without restrictions`);
-      
+
     } catch (error) {
       this.logError('Failed to start MCP server', error);
-      process.exit(1);
+      throw error; // Let caller handle error
     }
   }
   
@@ -681,9 +795,10 @@ class MinimalDamienMCP {
     const callToolErrorRate = this.requestStats.callTool.total > 0
       ? this.requestStats.callTool.errors / this.requestStats.callTool.total
       : 0;
-    
-    // Calculate tool-specific statistics
-    const toolStats = Object.entries(this.requestStats.callTool.byTool).map(([name, stats]) => {
+
+    // Calculate tool-specific statistics (from bounded LRU cache)
+    const byToolObject = this.requestStats.callTool.byTool.toObject();
+    const toolStats = Object.entries(byToolObject).map(([name, stats]) => {
       return {
         name,
         count: stats.count,
@@ -711,12 +826,18 @@ class MinimalDamienMCP {
         lastRequest: this.requestStats.callTool.lastRequest > 0
           ? new Date(this.requestStats.callTool.lastRequest).toISOString()
           : null,
-        tools: toolStats
+        tools: toolStats,
+        statsCache: this.requestStats.callTool.byTool.getCapacityInfo() // Memory leak prevention info
       },
       cache: {
         age: this.toolsCache.timestamp > 0 ? Date.now() - this.toolsCache.timestamp : null,
         isRefreshing: this.toolsCache.isRefreshing,
         hasData: !!this.toolsCache.data
+      },
+      memory: {
+        heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + ' MB',
+        heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + ' MB',
+        rss: Math.round(process.memoryUsage().rss / 1024 / 1024) + ' MB'
       },
       phase: {
         status: 'All tools enabled',

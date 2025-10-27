@@ -11,6 +11,13 @@ import logging
 # import importlib # No longer needed
 
 # Import Damien core_api components
+import sys
+import os
+# Add damien-cli directory to Python path
+damien_cli_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "damien-cli")
+if damien_cli_path not in sys.path:
+    sys.path.append(damien_cli_path)
+
 from damien_cli.core_api import gmail_api_service
 from damien_cli.core_api.exceptions import DamienError, GmailApiError
 

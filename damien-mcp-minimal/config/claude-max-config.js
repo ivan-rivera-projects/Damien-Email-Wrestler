@@ -47,7 +47,11 @@ if (!envLoaded) {
 export const CONFIG = {
   // Backend connection settings
   BACKEND_URL: process.env.DAMIEN_BACKEND_URL || process.env.DAMIEN_MCP_SERVER_URL || 'http://localhost:8892',
-  API_KEY: process.env.DAMIEN_MCP_SERVER_API_KEY || '7e508adf3ccf8b9376c312df8cebd488f3988f310afbdf5077d5d3ce63ed7c8f',
+  API_KEY: process.env.DAMIEN_MCP_SERVER_API_KEY || (() => {
+    console.error('❌ CRITICAL: DAMIEN_MCP_SERVER_API_KEY environment variable is required');
+    console.error('   Please set this in your .env file or environment');
+    throw new Error('DAMIEN_MCP_SERVER_API_KEY environment variable is required');
+  })(),
   
   // Server configuration
   SERVER_NAME: 'damien_email_wrestler_minimal',

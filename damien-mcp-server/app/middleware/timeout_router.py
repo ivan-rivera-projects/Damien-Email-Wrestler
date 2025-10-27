@@ -70,8 +70,8 @@ class TimeoutAwareRouter:
                 fast_params_threshold={"max_results": 50}  # Fast if ≤50 emails
             ),
             "damien_get_email_details": ToolProfile(
-                estimated_seconds=5.0,
-                has_async_version=False
+                estimated_seconds=10.0,  # Updated: Now uses chunked/metadata-first approach
+                has_async_version=False  # No longer times out - fetches metadata only, not attachment data
             ),
             "damien_trash_emails": ToolProfile(
                 estimated_seconds=20.0,

@@ -149,19 +149,41 @@ class ListThreadsParams(BaseModel):
 class GetThreadDetailsParams(BaseModel):
     """Parameters for getting thread details."""
     thread_id: str = Field(
-        ..., 
+        ...,
+        min_length=1,
         description="Thread ID to retrieve details for"
     )
     format: str = Field(
-        default="full", 
+        default="full",
         description="Detail level: 'full' (complete), 'metadata' (headers only), 'minimal' (IDs only)"
     )
-    
+
+    @field_validator('thread_id')
+    def validate_thread_id(cls, v):
+        """Validate thread ID is not empty or whitespace."""
+        if not v or not v.strip():
+            raise ValueError("thread_id cannot be empty or whitespace")
+
+        # Gmail thread IDs are typically 16 hex characters
+        # More lenient check - just ensure it's reasonable length and format
+        if len(v.strip()) < 10:
+            raise ValueError("thread_id appears to be invalid (too short)")
+
+        if len(v.strip()) > 100:
+            raise ValueError("thread_id appears to be invalid (too long)")
+
+        # Check for obviously invalid characters
+        stripped = v.strip()
+        if any(char in stripped for char in [' ', '\n', '\t', '\r']):
+            raise ValueError("thread_id cannot contain whitespace")
+
+        return stripped
+
     @field_validator('format')
     def validate_format(cls, v):
         allowed_formats = ['full', 'metadata', 'minimal']
         if v not in allowed_formats:
-            raise ValueError(f"Format must be one of: {allowed_formats}")
+            raise ValueError(f"Format must be one of: {allowed_formats}, got '{v}'")
         return v
 
 
@@ -256,53 +278,67 @@ async def list_threads_handler(params_dict: Dict[str, Any], context: Dict[str, A
 async def get_thread_details_handler(params_dict: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
     Get complete details for a specific thread.
-    
+
     Gmail scope required: gmail.readonly or gmail.modify
     Rate limit group: gmail_api_read
     """
     try:
-        # Parse parameters from dict
-        params = GetThreadDetailsParams(**params_dict) if isinstance(params_dict, dict) else params_dict
-        
-        logger.info(f"Processing get_thread_details with params: {params}")
-        
+        # Parse and validate parameters
+        try:
+            params = GetThreadDetailsParams(**params_dict) if isinstance(params_dict, dict) else params_dict
+        except ValueError as validation_error:
+            # Pydantic validation failed - return user-friendly error
+            logger.warning(f"Validation error in get_thread_details: {validation_error}")
+            return {
+                "success": False,
+                "error_message": f"Invalid parameters: {str(validation_error)}",
+                "error_type": "validation_error",
+                "provided_params": params_dict,
+                "context": context
+            }
+
+        logger.info(f"Processing get_thread_details with validated params: thread_id={params.thread_id}, format={params.format}")
+
         damien_adapter = DamienAdapter()
         gmail_service = await damien_adapter.get_gmail_service()
-        
+
         result = gmail_api_service.get_thread_details(
             gmail_service=gmail_service,
             thread_id=params.thread_id,
             format=params.format
         )
-        
+
         # Enhance response with context
         enhanced_result = {
             **result,
             "format_requested": params.format,
             "context": {
                 "user_id": context.get("user_id"),
-                "session_id": context.get("session_id"), 
+                "session_id": context.get("session_id"),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "tool_name": context.get("tool_name")
             }
         }
-        
+
+        logger.info(f"Successfully retrieved thread details for thread_id={params.thread_id}")
         return enhanced_result
-        
+
     except GmailApiError as e:
+        logger.error(f"Gmail API error in get_thread_details: {e}")
         return {
             "success": False,
             "error_message": str(e),
             "error_type": "gmail_api_error",
-            "thread_id": params.thread_id,
+            "thread_id": params.thread_id if 'params' in locals() else None,
             "context": context
         }
     except Exception as e:
+        logger.error(f"Unexpected error in get_thread_details: {e}", exc_info=True)
         return {
             "success": False,
             "error_message": f"Unexpected error getting thread details: {str(e)}",
-            "error_type": "internal_error", 
-            "thread_id": params.thread_id,
+            "error_type": "internal_error",
+            "thread_id": params.thread_id if 'params' in locals() else None,
             "context": context
         }
 

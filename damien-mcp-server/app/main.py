@@ -11,6 +11,7 @@ import logging
 # Import core components
 from .core.config import settings # For log level
 from .core.logging_setup import setup_logging # New logging setup
+from .core.secrets_validator import validate_secrets_on_startup, SecretsValidationError
 
 # Initialize logging for the application
 # This should be called once when the application starts.
@@ -47,6 +48,15 @@ from .services.tool_registry import tool_registry
 @app.on_event("startup")
 async def startup_event():
     """Initialize MCP server and register tools."""
+    # Validate all required secrets are present before starting
+    logger.info("🔐 Validating secrets configuration...")
+    try:
+        validate_secrets_on_startup(strict=True, settings_obj=settings)
+    except SecretsValidationError as e:
+        logger.critical(f"❌ CRITICAL: Secrets validation failed: {e}")
+        logger.critical("   Application cannot start without required secrets")
+        raise RuntimeError("Secrets validation failed - check logs for details") from e
+
     # Register all tool categories
     register_draft_tools()
     register_settings_tools()

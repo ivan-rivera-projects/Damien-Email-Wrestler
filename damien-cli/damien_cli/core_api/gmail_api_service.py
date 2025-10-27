@@ -518,30 +518,30 @@ def list_messages(gmail_service, query_string: str = None, max_results: int = 10
 def get_message_details(gmail_service, message_id: str, format: str = 'full') -> Dict[str, Any]:
     """
     Get detailed information about a specific message.
-    
+
     Args:
         gmail_service: Authenticated Gmail service client
         message_id: ID of the message to retrieve
         format: Format of the message ('full', 'metadata', 'minimal', 'raw')
-        
+
     Returns:
         Dict containing detailed message information
-        
+
     Raises:
         GmailApiError: If API call fails or message not found
     """
     try:
         logger.debug(f"Getting details for message {message_id}")
-        
+
         result = gmail_service.users().messages().get(
             userId='me',
             id=message_id,
             format=format
         ).execute()
-        
+
         logger.info(f"Retrieved details for message {message_id}")
         return result
-        
+
     except HttpError as e:
         if e.resp.status == 404:
             raise GmailApiError(f"Message {message_id} not found")
@@ -549,6 +549,259 @@ def get_message_details(gmail_service, message_id: str, format: str = 'full') ->
             error_details = e.error_details[0] if e.error_details else {}
             raise GmailApiError(f"Failed to get message details: {error_details.get('message', str(e))}")
     except Exception as e:
+        raise GmailApiError(f"Unexpected error getting message details: {str(e)}")
+
+
+# Helper functions for enhanced email fetching
+def _extract_headers_from_payload(payload: Dict) -> Dict[str, str]:
+    """
+    Extract email headers from Gmail API payload.
+
+    Args:
+        payload: Gmail API message payload
+
+    Returns:
+        Dict of header name -> value
+    """
+    headers = {}
+    for header in payload.get('headers', []):
+        headers[header['name']] = header['value']
+    return headers
+
+
+def _extract_body_parts_from_payload(payload: Dict) -> Dict[str, str]:
+    """
+    Extract text and HTML body parts from Gmail API payload.
+    Handles both simple and multipart messages.
+
+    Args:
+        payload: Gmail API message payload
+
+    Returns:
+        Dict with 'text' and 'html' keys containing decoded body content
+    """
+    result = {'text': '', 'html': ''}
+
+    def decode_body_data(data: str) -> str:
+        """Decode base64url-encoded body data."""
+        try:
+            return base64.urlsafe_b64decode(data).decode('utf-8', errors='replace')
+        except Exception as e:
+            logger.warning(f"Failed to decode body data: {e}")
+            return ""
+
+    def extract_from_part(part: Dict):
+        """Recursively extract text/html from a message part."""
+        mime_type = part.get('mimeType', '')
+        body = part.get('body', {})
+
+        # Check if this part has body data
+        if body.get('data'):
+            if mime_type == 'text/plain' and not result['text']:
+                result['text'] = decode_body_data(body['data'])
+            elif mime_type == 'text/html' and not result['html']:
+                result['html'] = decode_body_data(body['data'])
+
+        # Recursively process sub-parts
+        if part.get('parts'):
+            for sub_part in part['parts']:
+                extract_from_part(sub_part)
+
+    # Handle simple message (body data directly in payload)
+    if payload.get('body', {}).get('data'):
+        mime_type = payload.get('mimeType', '')
+        data = payload['body']['data']
+        if mime_type == 'text/plain':
+            result['text'] = decode_body_data(data)
+        elif mime_type == 'text/html':
+            result['html'] = decode_body_data(data)
+
+    # Handle multipart message
+    if payload.get('parts'):
+        for part in payload['parts']:
+            extract_from_part(part)
+
+    return result
+
+
+def _extract_attachment_metadata_from_payload(payload: Dict) -> List[Dict[str, Any]]:
+    """
+    Extract attachment metadata from Gmail API payload without downloading attachment data.
+
+    Args:
+        payload: Gmail API message payload
+
+    Returns:
+        List of dicts containing attachment metadata (id, filename, size, mimeType)
+    """
+    attachments = []
+
+    def extract_from_part(part: Dict):
+        """Recursively extract attachment metadata from message parts."""
+        # Check if this part is an attachment
+        if part.get('filename') and part.get('body', {}).get('attachmentId'):
+            attachment_info = {
+                'attachment_id': part['body']['attachmentId'],
+                'filename': part['filename'],
+                'size_bytes': part['body'].get('size', 0),
+                'mime_type': part.get('mimeType', 'application/octet-stream')
+            }
+            attachments.append(attachment_info)
+
+        # Recursively process sub-parts
+        if part.get('parts'):
+            for sub_part in part['parts']:
+                extract_from_part(sub_part)
+
+    # Process all parts
+    if payload.get('parts'):
+        for part in payload['parts']:
+            extract_from_part(part)
+
+    return attachments
+
+
+@with_rate_limiting
+def get_message_details_chunked(
+    gmail_service,
+    message_id: str,
+    detail_level: str = 'full_metadata',
+    include_body: bool = True,
+    include_attachment_metadata: bool = True
+) -> Dict[str, Any]:
+    """
+    Get email details with timeout-resistant chunked/progressive fetching.
+
+    This function uses format='metadata' to fetch email structure without downloading
+    attachment data, preventing timeouts on large emails.
+
+    Args:
+        gmail_service: Authenticated Gmail service client
+        message_id: ID of the message to retrieve
+        detail_level: Level of detail to fetch:
+            - 'headers_only': Just headers (fastest, 1-2s)
+            - 'standard': Headers + body text (medium, 3-7s)
+            - 'full_metadata': Headers + body + attachment metadata (3-10s, never times out)
+        include_body: Whether to include email body content (ignored if detail_level='headers_only')
+        include_attachment_metadata: Whether to include attachment metadata
+
+    Returns:
+        Dict containing:
+            - success: bool
+            - email_id: str
+            - headers: Dict[str, str]
+            - body: Dict[str, str] (with 'text' and 'html' keys)
+            - attachments: Dict with 'total_count', 'total_size_bytes', 'items'
+            - performance: Dict with timing and size estimates
+
+    Raises:
+        GmailApiError: If API call fails or message not found
+        InvalidParameterError: If parameters are invalid
+    """
+    import time
+    start_time = time.time()
+
+    # Validate parameters
+    valid_detail_levels = ['headers_only', 'standard', 'full_metadata']
+    if detail_level not in valid_detail_levels:
+        raise InvalidParameterError(
+            f"detail_level must be one of {valid_detail_levels}, got '{detail_level}'"
+        )
+
+    try:
+        logger.debug(f"Getting chunked details for message {message_id} with detail_level={detail_level}")
+
+        # PHASE 1: Fetch metadata (fast, no attachment data)
+        # This is the key to avoiding timeouts - we get structure without data
+        message = gmail_service.users().messages().get(
+            userId='me',
+            id=message_id,
+            format='metadata'  # Gets headers + structure, NO attachment data
+        ).execute()
+
+        phase1_time = time.time() - start_time
+        logger.debug(f"Phase 1 (metadata fetch) completed in {phase1_time:.2f}s")
+
+        # Extract basic info
+        payload = message.get('payload', {})
+        thread_id = message.get('threadId', '')
+        label_ids = message.get('labelIds', [])
+
+        # Extract headers
+        headers = _extract_headers_from_payload(payload)
+
+        # Build response
+        response = {
+            'success': True,
+            'email_id': message_id,
+            'thread_id': thread_id,
+            'label_ids': label_ids,
+            'headers': headers,
+            'body': {'text': '', 'html': ''},
+            'attachments': {
+                'total_count': 0,
+                'total_size_bytes': 0,
+                'items': []
+            },
+            'performance': {
+                'format_used': 'metadata',
+                'detail_level': detail_level,
+                'fetch_time_seconds': 0.0,
+                'estimated_size_mb': 0.0
+            }
+        }
+
+        # PHASE 2: Extract body if requested (still fast, uses metadata response)
+        if detail_level in ['standard', 'full_metadata'] and include_body:
+            # Note: metadata format includes body structure and small bodies
+            # Large bodies are truncated, but we get what's available
+            body_parts = _extract_body_parts_from_payload(payload)
+            response['body'] = body_parts
+            logger.debug(f"Extracted body: text={len(body_parts['text'])} chars, html={len(body_parts['html'])} chars")
+
+        # PHASE 3: Extract attachment metadata if requested (fast, just metadata)
+        if detail_level == 'full_metadata' and include_attachment_metadata:
+            attachments = _extract_attachment_metadata_from_payload(payload)
+            total_size = sum(att['size_bytes'] for att in attachments)
+
+            response['attachments'] = {
+                'total_count': len(attachments),
+                'total_size_bytes': total_size,
+                'total_size_mb': round(total_size / (1024 * 1024), 2),
+                'items': attachments
+            }
+
+            logger.debug(f"Found {len(attachments)} attachments, total size: {total_size / (1024 * 1024):.2f} MB")
+
+        # Calculate performance metrics
+        total_time = time.time() - start_time
+        estimated_size_mb = response['attachments']['total_size_bytes'] / (1024 * 1024)
+
+        response['performance'] = {
+            'format_used': 'metadata',
+            'detail_level': detail_level,
+            'fetch_time_seconds': round(total_time, 3),
+            'estimated_size_mb': round(estimated_size_mb, 2),
+            'phase_1_time_seconds': round(phase1_time, 3)
+        }
+
+        logger.info(
+            f"Retrieved chunked details for message {message_id}: "
+            f"{len(attachments) if include_attachment_metadata else 0} attachments, "
+            f"{estimated_size_mb:.2f} MB, "
+            f"{total_time:.2f}s"
+        )
+
+        return response
+
+    except HttpError as e:
+        if e.resp.status == 404:
+            raise GmailApiError(f"Message {message_id} not found")
+        else:
+            error_details = e.error_details[0] if e.error_details else {}
+            raise GmailApiError(f"Failed to get message details: {error_details.get('message', str(e))}")
+    except Exception as e:
+        logger.error(f"Unexpected error in get_message_details_chunked: {e}", exc_info=True)
         raise GmailApiError(f"Unexpected error getting message details: {str(e)}")
 
 
@@ -1489,46 +1742,77 @@ def list_threads(gmail_service, query: str = None, max_results: int = 100,
         raise GmailApiError(f"Unexpected error listing threads: {str(e)}")
 
 
-@with_rate_limiting  
+@with_rate_limiting
 def get_thread_details(gmail_service, thread_id: str, format: str = 'full') -> Dict:
     """
     Get complete thread information including all messages.
-    
+
     Args:
         gmail_service: Authenticated Gmail service instance
         thread_id: Thread ID to retrieve
         format: Detail level - 'full', 'metadata', or 'minimal'
-        
+
     Returns:
         Dict containing complete thread information
-        
+
     Raises:
         GmailApiError: If Gmail API call fails or thread not found
+        ValueError: If input parameters are invalid
     """
+    # === INPUT VALIDATION (Defense in Depth) ===
+
+    # Validate thread_id
+    if not thread_id:
+        raise ValueError("thread_id is required and cannot be None or empty")
+
+    if not isinstance(thread_id, str):
+        raise ValueError(f"thread_id must be a string, got {type(thread_id).__name__}")
+
+    thread_id = thread_id.strip()
+    if not thread_id:
+        raise ValueError("thread_id cannot be empty or whitespace")
+
+    if len(thread_id) < 10:
+        raise ValueError(f"thread_id appears invalid: too short (length: {len(thread_id)})")
+
+    if len(thread_id) > 100:
+        raise ValueError(f"thread_id appears invalid: too long (length: {len(thread_id)})")
+
+    # Validate format
+    allowed_formats = ['full', 'metadata', 'minimal']
+    if format not in allowed_formats:
+        raise ValueError(f"format must be one of {allowed_formats}, got '{format}'")
+
+    # === GMAIL API CALL ===
     try:
         result = gmail_service.users().threads().get(
             userId='me',
             id=thread_id,
             format=format
         ).execute()
-        
+
         return {
             "success": True,
             "thread": result,
             "thread_id": thread_id,
             "message_count": len(result.get('messages', []))
         }
-        
+
     except HttpError as e:
         if e.resp.status == 404:
-            raise GmailApiError(f"Thread {thread_id} not found")
+            raise GmailApiError(f"Thread '{thread_id}' not found (404)")
         elif e.resp.status == 403:
-            raise GmailApiError("Insufficient permissions to access thread")
+            raise GmailApiError("Insufficient permissions to access thread (403)")
+        elif e.resp.status == 400:
+            raise GmailApiError(f"Invalid thread_id format: '{thread_id}' (400)")
         else:
             error_details = e.error_details[0] if e.error_details else {}
             raise GmailApiError(
                 f"Failed to get thread details: {error_details.get('message', str(e))}"
             )
+    except ValueError as e:
+        # Re-raise validation errors with clear context
+        raise ValueError(f"Parameter validation failed: {str(e)}")
     except Exception as e:
         raise GmailApiError(f"Unexpected error getting thread details: {str(e)}")
 

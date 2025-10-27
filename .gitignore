@@ -260,3 +260,7 @@ k8s-secrets.yml
 terraform.tfstate
 terraform.tfstate.backup
 .terraform/all_files.txt
+docs/GEMINI_MCP_CONFIGURATION.md
+github-mcp-server/
+claude-code-mcp-bug-repro/
+docs/archive/

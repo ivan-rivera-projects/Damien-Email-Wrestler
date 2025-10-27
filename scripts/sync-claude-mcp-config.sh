@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # ========================================
-# Damien Email Wrestler - Claude MCP Config Sync
+# Damien Email Wrestler - Claude Desktop MCP Config Sync
 # ========================================
-# Automatically syncs Claude Code MCP configuration with .env file
-# Ensures single source of truth for API keys and configuration
+# Automatically syncs Claude Desktop MCP configuration with .env file
+# Updates ONLY Claude Desktop config (not Claude Code)
 
 set -euo pipefail
 
@@ -13,7 +13,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$PROJECT_ROOT/.env"
 
-echo "🔄 Syncing Claude Code MCP configuration with .env file..."
+# Claude Desktop config location
+CLAUDE_DESKTOP_CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
+
+echo "🔄 Syncing Claude Desktop MCP configuration with .env file..."
 
 # Verify .env file exists
 if [ ! -f "$ENV_FILE" ]; then
@@ -31,11 +34,6 @@ if [ -z "${DAMIEN_MCP_SERVER_API_KEY:-}" ]; then
     exit 1
 fi
 
-if [ -z "${DAMIEN_MCP_SERVER_URL:-}" ]; then
-    echo "❌ Error: DAMIEN_MCP_SERVER_URL not found in .env file"  
-    exit 1
-fi
-
 # Get minimal server path
 MINIMAL_SERVER_PATH="$PROJECT_ROOT/damien-mcp-minimal/server.js"
 if [ ! -f "$MINIMAL_SERVER_PATH" ]; then
@@ -43,29 +41,58 @@ if [ ! -f "$MINIMAL_SERVER_PATH" ]; then
     exit 1
 fi
 
+# Verify Claude Desktop config exists
+if [ ! -f "$CLAUDE_DESKTOP_CONFIG" ]; then
+    echo "❌ Error: Claude Desktop config not found at $CLAUDE_DESKTOP_CONFIG"
+    echo "Please ensure Claude Desktop is installed and has been run at least once"
+    exit 1
+fi
+
 echo "📋 Configuration to sync:"
-echo "   API Key: ${DAMIEN_MCP_SERVER_API_KEY:0:16}..."
-echo "   Server URL: $DAMIEN_MCP_SERVER_URL"
-echo "   Server Path: $MINIMAL_SERVER_PATH"
+echo "   Server: damien-email-wrestler"
+echo "   Command: node $MINIMAL_SERVER_PATH"
+echo "   Target: Claude Desktop"
 
-# Remove existing damien-email-wrestler MCP configuration
-echo "🗑️  Removing existing Claude Code MCP configuration..."
-claude mcp remove damien-email-wrestler 2>/dev/null || echo "   (No existing configuration found)"
+# Update Claude Desktop config using Python for safe JSON manipulation
+python3 << PYTHON_SCRIPT
+import json
+import os
+from pathlib import Path
 
-# Add new configuration with values from .env
-echo "➕ Adding new Claude Code MCP configuration..."
-claude mcp add damien-email-wrestler \
-  "node" \
-  "$MINIMAL_SERVER_PATH" \
-  -e DAMIEN_MCP_SERVER_URL="$DAMIEN_MCP_SERVER_URL" \
-  -e DAMIEN_MCP_SERVER_API_KEY="$DAMIEN_MCP_SERVER_API_KEY" \
-  -e DAMIEN_MCP_MINIMAL_PORT="${DAMIEN_MCP_MINIMAL_PORT:-8893}" \
-  -e LOG_LEVEL="${LOG_LEVEL:-INFO}"
+config_path = Path("$CLAUDE_DESKTOP_CONFIG")
 
-echo "✅ Claude Code MCP configuration synced successfully!"
+# Read existing config
+with open(config_path, 'r') as f:
+    config = json.load(f)
+
+# Ensure mcpServers key exists
+if 'mcpServers' not in config:
+    config['mcpServers'] = {}
+
+# Add or update damien-email-wrestler configuration
+config['mcpServers']['damien-email-wrestler'] = {
+    "command": "node",
+    "args": ["$MINIMAL_SERVER_PATH"]
+}
+
+# Write updated config back
+with open(config_path, 'w') as f:
+    json.dump(config, f, indent=2)
+
+print(f"✅ Added damien-email-wrestler to Claude Desktop config")
+print(f"📝 Config location: {config_path}")
+PYTHON_SCRIPT
+
+if [ $? -ne 0 ]; then
+    echo "❌ Error: Failed to update Claude Desktop configuration"
+    exit 1
+fi
+
 echo ""
-echo "🔍 Verify configuration:"
-echo "   claude mcp list"
+echo "✅ Claude Desktop MCP configuration synced successfully!"
 echo ""
-echo "💡 To automatically sync after .env changes, run this script again"
-echo "   or add it to your startup scripts"
+echo "🔍 Next steps:"
+echo "   1. Restart Claude Desktop completely (quit and reopen)"
+echo "   2. The damien-email-wrestler server will be available"
+echo ""
+echo "💡 Tip: Restart Claude Desktop to load the updated configuration"
