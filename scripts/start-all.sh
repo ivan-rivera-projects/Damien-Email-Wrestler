@@ -320,8 +320,18 @@ fi
 if [ "$ALL_HEALTHY" = true ]; then
     echo ""
     echo -e "${GREEN}🎉 All services are running successfully!${NC}"
+
+    # Auto-enable MCP in Claude Code now that services are running
     echo ""
-    
+    echo "🔧 Enabling Damien MCP in Claude Code..."
+    if ./scripts/claude-code-enable-mcp.sh > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ MCP enabled in Claude Code${NC}"
+        echo -e "${BLUE}💡 Restart Claude Code to access 48 email management tools${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Failed to auto-enable MCP (run ./scripts/claude-code-enable-mcp.sh manually)${NC}"
+    fi
+
+    echo ""
     echo -e "${BLUE}📋 Hybrid AI Features Available (39 optimized tools):${NC}"
     echo "  • Email management (list, read, label, trash, delete) - 13 tools"
     echo "  • AI-powered analysis with optional AWS Lambda enhancement - 12 tools"

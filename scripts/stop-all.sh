@@ -85,6 +85,15 @@ if [ -n "$claude_processes" ]; then
 fi
 
 echo ""
+echo "🔧 Disabling Damien MCP in Claude Code..."
+if ./scripts/claude-code-disable-mcp.sh > /dev/null 2>&1; then
+    echo -e "${GREEN}✓ MCP disabled in Claude Code${NC}"
+    echo -e "${BLUE}💡 Context window freed - MCP tools no longer consuming space${NC}"
+else
+    echo -e "${YELLOW}⚠️  Failed to auto-disable MCP (run ./scripts/claude-code-disable-mcp.sh manually)${NC}"
+fi
+
+echo ""
 echo "📊 Service Status"
 echo "================"
 

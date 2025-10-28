@@ -7,13 +7,27 @@ This guide explains how to enable/disable the Damien MCP server in Claude Code f
 
 ## Quick Start
 
-### Enable Damien Tools in Claude Code
+### Automatic MCP Management (Recommended)
+MCP configuration is now **automatically managed** by service scripts:
+
 ```bash
-./scripts/claude-code-enable-mcp.sh
+# Start services → Auto-enables MCP in Claude Code
+./scripts/start-all.sh
+
+# Stop services → Auto-disables MCP in Claude Code
+./scripts/stop-all.sh
 ```
 
-### Disable Damien Tools
+**Why automatic?** With 48 tools, Damien consumes significant context window space. Auto-management ensures tools are only enabled when backend services are running and ready to serve them.
+
+### Manual MCP Management (Advanced)
+If you need to manually control MCP without affecting services:
+
 ```bash
+# Enable MCP only
+./scripts/claude-code-enable-mcp.sh
+
+# Disable MCP only
 ./scripts/claude-code-disable-mcp.sh
 ```
 
@@ -375,7 +389,50 @@ curl http://localhost:8893/health
 
 ---
 
+## Context Window Optimization
+
+### The Problem
+With **48 tools**, Damien's MCP server consumes significant context window space in every Claude Code session. Each tool definition includes:
+- Tool name and description
+- Complete input schema
+- Parameter types and validation rules
+- Example usage patterns
+
+**Total context impact:** ~15-20% of available context window
+
+### The Solution: Auto-Enable/Disable
+Services running = MCP enabled = Context usage justified
+Services stopped = MCP disabled = Context window freed
+
+**Benefits:**
+- ✅ Zero context waste when not using email tools
+- ✅ Automatic management - no manual steps
+- ✅ Services and tools always in sync
+- ✅ Maximum available context for coding tasks
+
+### Workflow
+```bash
+# Working on email management
+./scripts/start-all.sh          # Services start + MCP enabled
+# [Restart Claude Code]
+# [Use 48 email tools]
+
+# Done with email, working on code
+./scripts/stop-all.sh            # Services stop + MCP disabled
+# [Restart Claude Code]
+# [Full context available for coding]
+```
+
+---
+
 ## Changelog
+
+### 2025-10-28 - Auto-Enable/Disable MCP Integration
+- Integrated MCP management into service lifecycle
+- `start-all.sh` now auto-enables MCP in Claude Code
+- `stop-all.sh` now auto-disables MCP in Claude Code
+- Context window optimization: tools only enabled when services running
+- Updated documentation with automatic workflow
 
 ### 2025-10-27 - Parameter Marshaling Fix
 - Fixed array parameter handling in Claude Code
