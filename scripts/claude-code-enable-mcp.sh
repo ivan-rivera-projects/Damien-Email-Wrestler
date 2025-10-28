@@ -32,6 +32,13 @@ fi
 
 # Add/Update MCP server configuration
 echo "📝 Configuring Claude Code MCP server..."
+
+# Check if already configured - if so, remove and re-add to ensure latest config
+if claude mcp list 2>&1 | grep -q "damien-email-wrestler"; then
+    echo "   Updating existing configuration..."
+    claude mcp remove damien-email-wrestler 2>/dev/null || true
+fi
+
 claude mcp add damien-email-wrestler \
   "node" \
   "$SERVER_PATH" \
