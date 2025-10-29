@@ -1,5 +1,5 @@
 # MCP Tool Usage Guide for Claude Code
-## Damien Email Wrestler - 48 Tools Documentation
+## Damien Email Wrestler - 49 Tools Documentation
 
 **Version**: Claude Code Compatible  
 **Last Updated**: 2025-07-16  
@@ -26,8 +26,13 @@
 
 ### AI Analysis Pattern (VERIFIED)
 ```
+Option 1 (Recommended - Auto-polling):
 1. damien_ai_analyze_emails_async(days=30, target_count=100, min_confidence=0.85)
-2. damien_job_get_status(job_id) → Monitor progress
+2. damien_job_wait_for_completion(job_id) → Automatically polls until complete
+
+Option 2 (Manual polling):
+1. damien_ai_analyze_emails_async(days=30, target_count=100, min_confidence=0.85)
+2. damien_job_get_status(job_id) → Monitor progress manually
 3. damien_job_get_result(job_id) → Get insights
 ```
 
@@ -163,6 +168,99 @@ Then: Get details for each ID individually
 **Claude Code Status**: VERIFIED WORKING
 **Parameters**: None required
 
+### `damien_job_wait_for_completion` - Auto-Poll Job Until Complete
+**Claude Code Status**: VERIFIED WORKING
+**Purpose**: Automatically monitors background jobs until completion - no more manual status checks!
+
+**Optimal Parameters**:
+```json
+{
+  "job_id": "job_id_from_async_operation",
+  "poll_interval": 10,
+  "timeout": 600,
+  "max_polls": 60,
+  "show_progress": true,
+  "exponential_backoff": true
+}
+```
+
+**Parameter Details**:
+- `job_id` (required): Job ID from async operation
+- `poll_interval` (default: 10): Initial polling interval in seconds
+- `timeout` (default: 600): Maximum wait time in seconds (10 minutes)
+- `max_polls` (default: 60): Maximum number of polling attempts
+- `show_progress` (default: true): Show progress updates during polling
+- `exponential_backoff` (default: true): Progressive intervals (5s→10s→15s→30s)
+
+**Usage Examples**:
+
+Basic usage (recommended):
+```json
+{
+  "job_id": "task_7125151d"
+}
+```
+
+Silent background mode:
+```json
+{
+  "job_id": "task_7125151d",
+  "show_progress": false
+}
+```
+
+Custom timeout for large jobs:
+```json
+{
+  "job_id": "task_7125151d",
+  "timeout": 1200,
+  "max_polls": 120
+}
+```
+
+Conservative polling:
+```json
+{
+  "job_id": "task_7125151d",
+  "poll_interval": 30,
+  "exponential_backoff": false
+}
+```
+
+**Success Response**:
+```json
+{
+  "success": true,
+  "status": "completed",
+  "result": {
+    "patterns": [...],
+    "statistics": {...}
+  },
+  "completion_details": {
+    "total_wait_time": 85.2,
+    "polls_used": 9,
+    "final_interval": 10
+  }
+}
+```
+
+**Timeout Response** (job still running):
+```json
+{
+  "success": false,
+  "status": "timeout",
+  "last_known_status": "running",
+  "suggestion": "Job may still be running. Use damien_job_get_status(job_id='task_xxx') to check current status, or call again with higher timeout.",
+  "progress_history": [...]
+}
+```
+
+**Best Practices**:
+- Use default parameters for most scenarios
+- Set `show_progress: false` for silent background operations
+- Increase `timeout` and `max_polls` for jobs processing 1000+ emails
+- Check `completion_details` to optimize future polling strategies
+
 ---
 
 ## 🗂️ Organization Tools - Natural Language Interface
@@ -296,8 +394,13 @@ Then: Get details for each ID individually
 4. Compile tabular results
 ```
 
-### Workflow 2: AI-Powered Email Analysis
+### Workflow 2: AI-Powered Email Analysis (Recommended with Auto-Polling)
 ```
+1. damien_ai_analyze_emails_async(days=30, target_count=100, min_confidence=0.85)
+2. damien_job_wait_for_completion(job_id) → Automatically polls until complete
+3. Process automation recommendations from result
+
+Alternative (Manual Polling):
 1. damien_ai_analyze_emails_async(days=30, target_count=100, min_confidence=0.85)
 2. damien_job_get_status(job_id) until complete
 3. damien_job_get_result(job_id)
@@ -342,10 +445,11 @@ Use this checklist to verify tool functionality:
 - [ ] `damien_trash_emails` works with ID arrays
 - [ ] `damien_label_emails` applies labels correctly
 
-### AI Functions  
+### AI Functions
 - [ ] `damien_ai_analyze_emails_async` starts jobs
 - [ ] `damien_job_get_status` shows progress
 - [ ] `damien_job_get_result` returns analysis
+- [ ] `damien_job_wait_for_completion` auto-polls until complete
 - [ ] Confidence thresholds work correctly
 
 ### Advanced Functions

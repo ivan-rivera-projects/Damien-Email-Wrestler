@@ -13,7 +13,7 @@ Damien Email Wrestler is an **enterprise-grade AI email intelligence platform** 
 ## ✨ **Current Status: Professional Development Workflow v0.5.0** 🎉
 
 ### **🏆 Complete AI Email Intelligence Platform with Professional GitHub Workflow**
-- **48 Optimized Tools**: Enhanced email management suite with natural language organization and smart cleanup
+- **49 Optimized Tools**: Enhanced email management suite with natural language organization, smart cleanup, and auto-polling
 - **✅ PROFESSIONAL WORKFLOW COMPLETE**: GitHub automation, issue templates, PR validation, and automated labeling
 - **✅ ENHANCED WORKFLOW VALIDATED**: 282 marketing emails processed with 100% precision across production tests
 - **Hybrid Architecture**: CLI reliability + AWS Lambda AI enhancement when configured
@@ -103,7 +103,7 @@ Damien Email Wrestler consists of integrated components with hybrid CLI + AWS La
 ### **Component Breakdown**
 
 #### **🤖 Damien MCP Server (Port 8892)**
-- **48 Optimized MCP Tools**: Focused email management toolkit following Pareto principle
+- **49 Optimized MCP Tools**: Focused email management toolkit with auto-polling capabilities
 - **Hybrid Processing**: Standard CLI analysis + AWS Lambda AI enhancement (when configured)
 - **Graceful Fallback**: Full functionality without AWS - Lambda enhances but never required
 - **FastAPI Backend**: High-performance async API with comprehensive monitoring
