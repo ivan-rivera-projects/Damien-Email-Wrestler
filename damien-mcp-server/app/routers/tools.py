@@ -92,6 +92,10 @@ logger = logging.getLogger("damien_mcp_server_app") # Use the configured app log
 # Create router
 router = APIRouter()
 
+# Session tracking for API usage guidance (Issue #22)
+# Track which sessions have already seen the guidance message
+_sessions_with_guidance_shown = set()
+
 @router.get("/optimization_status", summary="Get timeout optimization status")
 async def get_optimization_status(api_key: str = Depends(verify_api_key)):
     """Get the status of timeout optimization and routing statistics."""
@@ -503,16 +507,20 @@ async def execute_tool_endpoint(
     )
     
     # Add tool usage policy headers to encourage direct MCP tool usage
+    # Issue #22: Show guidance only once per session to reduce clutter
     from ..core.tool_usage_config import get_tool_usage_config
     config = get_tool_usage_config()
-    
+
+    # Check if this session has already seen the guidance message
+    session_needs_guidance = session_id not in _sessions_with_guidance_shown
+
     # We need to set headers in FastAPI's response object
     # This requires using a response_model_exclude_none=True parameter in the router decorator
     # But we can also add a note in the response for AI engines to see
-    if not is_error_flag and config.warn_on_api_usage:
+    if not is_error_flag and config.warn_on_api_usage and session_needs_guidance:
         if tool_output_data is None:
             tool_output_data = {}
-        
+
         if isinstance(tool_output_data, dict):
             tool_output_data["_api_usage_guidance"] = {
                 "message": config.direct_tool_message,
@@ -520,6 +528,10 @@ async def execute_tool_endpoint(
                 "policy": config.policy
             }
             mcp_response.output = tool_output_data
+
+            # Mark this session as having seen the guidance
+            _sessions_with_guidance_shown.add(session_id)
+            logger.info(f"API usage guidance shown for session {session_id} (first tool call)")
     
     # Try to save context (should not prevent returning the tool response)
     try:
