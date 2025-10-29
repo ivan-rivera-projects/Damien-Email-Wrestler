@@ -36,7 +36,7 @@ Successfully resolved critical security vulnerability where API keys were hardco
 
 **Before:**
 ```javascript
-API_KEY: process.env.DAMIEN_MCP_SERVER_API_KEY || '7e508adf3ccf8b9376c312df8cebd488f3988f310afbdf5077d5d3ce63ed7c8f'
+API_KEY: process.env.DAMIEN_MCP_SERVER_API_KEY || ''  // Security: No fallback
 ```
 
 **After:**

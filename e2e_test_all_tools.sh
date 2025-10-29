@@ -8,7 +8,13 @@
 
 # --- Configuration ---
 BASE_URL="http://localhost:8893"
-API_KEY="2cce28d6432ac936fba9bdb124059c1b034a9858fe22ce4d3e367136b5b251c7"
+# Security: Read API key from .env file
+if [ -f "damien-mcp-server/.env" ]; then
+    API_KEY=$(grep DAMIEN_MCP_SERVER_API_KEY damien-mcp-server/.env | cut -d '=' -f2)
+else
+    echo "❌ Error: damien-mcp-server/.env not found"
+    exit 1
+fi
 REPORT_FILE="E2E_TEST_RESULTS.md"
 SESSION_ID="e2e-test-$(date +%s)"
 

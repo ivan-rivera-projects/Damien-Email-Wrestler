@@ -65,7 +65,7 @@ curl http://localhost:8892/health
 ### Step 2: List Available Tools
 
 ```bash
-curl -H "X-API-Key: 2cce28d6432ac936fba9bdb124059c1b034a9858fe22ce4d3e367136b5b251c7" \
+curl -H "X-API-Key: YOUR_API_KEY_HERE  # Get from: grep DAMIEN_MCP_SERVER_API_KEY damien-mcp-server/.env" \
   http://localhost:8892/mcp/list_tools | python3 -m json.tool
 ```
 
@@ -76,7 +76,7 @@ curl -H "X-API-Key: 2cce28d6432ac936fba9bdb124059c1b034a9858fe22ce4d3e367136b5b2
 ```bash
 curl -X POST http://localhost:8892/mcp/execute_tool \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: 2cce28d6432ac936fba9bdb124059c1b034a9858fe22ce4d3e367136b5b251c7" \
+  -H "X-API-Key: YOUR_API_KEY_HERE  # Get from: grep DAMIEN_MCP_SERVER_API_KEY damien-mcp-server/.env" \
   -d '{
     "tool_name": "damien_list_emails",
     "input": {"max_results": 5},
@@ -96,7 +96,7 @@ curl -X POST http://localhost:8892/mcp/execute_tool \
 
 **Headers:**
 ```
-X-API-Key: 2cce28d6432ac936fba9bdb124059c1b034a9858fe22ce4d3e367136b5b251c7
+X-API-Key: YOUR_API_KEY_HERE  # Get from: grep DAMIEN_MCP_SERVER_API_KEY damien-mcp-server/.env
 ```
 
 **Response:**
@@ -127,7 +127,7 @@ X-API-Key: 2cce28d6432ac936fba9bdb124059c1b034a9858fe22ce4d3e367136b5b251c7
 **Headers:**
 ```
 Content-Type: application/json
-X-API-Key: 2cce28d6432ac936fba9bdb124059c1b034a9858fe22ce4d3e367136b5b251c7
+X-API-Key: YOUR_API_KEY_HERE  # Get from: grep DAMIEN_MCP_SERVER_API_KEY damien-mcp-server/.env
 ```
 
 **Request Body:**
@@ -209,7 +209,7 @@ def damien_list_emails(query="", max_results=20):
         "http://localhost:8892/mcp/execute_tool",
         headers={
             "Content-Type": "application/json",
-            "X-API-Key": "2cce28d6432ac936fba9bdb124059c1b034a9858fe22ce4d3e367136b5b251c7"
+            "X-API-Key": "YOUR_API_KEY_HERE"  # Read from .env file
         },
         json={
             "tool_name": "damien_list_emails",
@@ -248,7 +248,7 @@ def call_damien_tool(tool_name, parameters):
         "http://localhost:8892/mcp/execute_tool",
         headers={
             "Content-Type": "application/json",
-            "X-API-Key": "2cce28d6432ac936fba9bdb124059c1b034a9858fe22ce4d3e367136b5b251c7"
+            "X-API-Key": "YOUR_API_KEY_HERE"  # Read from .env file
         },
         json={
             "tool_name": tool_name,
@@ -265,7 +265,7 @@ def call_damien_tool(tool_name, parameters):
 def load_damien_tools():
     response = requests.get(
         "http://localhost:8892/mcp/list_tools",
-        headers={"X-API-Key": "2cce28d6432ac936fba9bdb124059c1b034a9858fe22ce4d3e367136b5b251c7"}
+        headers={"X-API-Key": "YOUR_API_KEY_HERE"  # Read from .env file}
     )
     return response.json()
 
@@ -329,7 +329,7 @@ import json
 from typing import Dict, Any
 
 DAMIEN_API_URL = "http://localhost:8892/mcp/execute_tool"
-DAMIEN_API_KEY = "2cce28d6432ac936fba9bdb124059c1b034a9858fe22ce4d3e367136b5b251c7"
+DAMIEN_API_KEY = os.getenv("DAMIEN_MCP_SERVER_API_KEY")  # Read from environment
 
 class DamienProxy:
     """Proxy for Gemini to access Damien tools"""

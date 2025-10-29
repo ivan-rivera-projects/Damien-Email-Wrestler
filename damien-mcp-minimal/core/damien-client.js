@@ -18,7 +18,7 @@ export class DamienClient {
     
     this.apiKey = config.apiKey !== undefined ? config.apiKey :
                   process.env.DAMIEN_MCP_SERVER_API_KEY || 
-                  '7e508adf3ccf8b9376c312df8cebd488f3988f310afbdf5077d5d3ce63ed7c8f';
+                  ''; // Security: API key MUST come from environment variable
     
     // Request configuration
     this.defaultTimeout = config.timeout || 30000; // 30 seconds

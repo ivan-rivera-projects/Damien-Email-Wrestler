@@ -44,6 +44,14 @@ scripts/*-test.sh
 claude-integration.sh
 **/claude-integration.sh
 
+# Test and debugging scripts (may contain API keys)
+test_*.py
+reproduce*.py
+find_*.py
+issue_*.py
+*_test_output.log
+*.log
+
 # AWS Credentials
 .aws/
 aws-credentials.json
