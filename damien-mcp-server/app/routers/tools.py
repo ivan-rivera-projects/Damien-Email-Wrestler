@@ -434,9 +434,10 @@ async def execute_tool_endpoint(
                            # AI Intelligence tools added here (Phase 4)
                            "damien_ai_analyze_emails", "damien_ai_suggest_rules", "damien_ai_quick_test",
                            "damien_ai_create_rule", "damien_ai_get_insights", "damien_ai_optimize_inbox",
-                           # Async job tools added here 
+                           # Async job tools added here
                            "damien_ai_analyze_emails_async", "damien_job_get_status", "damien_job_get_result",
                            "damien_job_cancel", "damien_job_list", "damien_ai_bulk_operations",
+                           "damien_job_wait_for_completion",  # Issue #34 Enhancement
                            # Enhanced trash tools added here
                            "damien_trash_emails_by_query", "damien_smart_trash_marketing",
                            # Organization tools added here

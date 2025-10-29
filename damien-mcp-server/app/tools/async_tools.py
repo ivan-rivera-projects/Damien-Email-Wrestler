@@ -408,6 +408,167 @@ async def damien_ai_bulk_operations_handler(params: Dict[str, Any], context: Dic
         }
 
 
+async def damien_job_wait_for_completion_handler(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Handler for auto-polling job status until completion (Issue #34 Enhancement).
+
+    This tool eliminates the need for manual polling by automatically checking
+    job status at configured intervals and returning results when complete.
+
+    Features:
+    - Configurable polling intervals with optional exponential backoff
+    - Smart timeout handling with partial results
+    - Polling limits to prevent runaway loops
+    - Optional progress updates for user visibility
+    - Graceful degradation on timeout
+    """
+    try:
+        # Extract parameters with smart defaults
+        job_id = params.get("job_id")
+        poll_interval = params.get("poll_interval", 10)  # 10 seconds default
+        timeout = params.get("timeout", 600)  # 10 minutes default
+        max_polls = params.get("max_polls", 60)  # 60 polls max
+        show_progress = params.get("show_progress", True)
+        exponential_backoff = params.get("exponential_backoff", True)
+
+        # Validation
+        if not job_id:
+            return {
+                "success": False,
+                "error_message": "job_id parameter is required"
+            }
+
+        # Exponential backoff intervals: 5s → 10s → 15s → 30s
+        backoff_intervals = [5, 10, 15, 30]
+
+        # Tracking variables
+        poll_count = 0
+        start_time = datetime.now(timezone.utc)
+        last_status = None
+        progress_updates = []
+
+        logger.info(f"Starting auto-poll for job {job_id} (interval: {poll_interval}s, timeout: {timeout}s, max_polls: {max_polls})")
+
+        while poll_count < max_polls:
+            # Check elapsed time
+            elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
+            if elapsed >= timeout:
+                # Smart timeout handling - return partial results
+                logger.warning(f"Timeout reached ({timeout}s) for job {job_id} at poll {poll_count}")
+                return {
+                    "success": False,
+                    "status": "timeout",
+                    "job_id": job_id,
+                    "elapsed_time_seconds": elapsed,
+                    "polls_completed": poll_count,
+                    "last_known_status": last_status,
+                    "message": f"Job did not complete within {timeout} seconds",
+                    "suggestion": f"Job may still be running. Use damien_job_get_status(job_id='{job_id}') to check current status.",
+                    "progress_history": progress_updates if show_progress else None
+                }
+
+            poll_count += 1
+
+            # Get current status
+            status = async_processor.get_task_status(job_id)
+            if not status:
+                return {
+                    "success": False,
+                    "error_message": f"Job {job_id} not found",
+                    "job_id": job_id,
+                    "polls_completed": poll_count
+                }
+
+            last_status = status
+            current_progress = status.get("progress", 0)
+            current_message = status.get("message", "")
+            job_status = status.get("status")
+
+            # Build progress update
+            if show_progress:
+                progress_updates.append({
+                    "poll_number": poll_count,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "progress_percentage": current_progress,
+                    "message": current_message,
+                    "status": job_status,
+                    "elapsed_seconds": elapsed
+                })
+                logger.info(f"[Poll {poll_count}/{max_polls}] {current_progress:.0f}% - {current_message}")
+
+            # Check if job completed
+            if job_status == TaskStatus.COMPLETED.value:
+                logger.info(f"Job {job_id} completed successfully after {poll_count} polls and {elapsed:.1f}s")
+
+                return {
+                    "success": True,
+                    "status": "completed",
+                    "job_id": job_id,
+                    "result": status.get("result"),
+                    "completion_details": {
+                        "polls_required": poll_count,
+                        "elapsed_time_seconds": elapsed,
+                        "start_time": status.get("start_time"),
+                        "end_time": status.get("end_time")
+                    },
+                    "progress_history": progress_updates if show_progress else None
+                }
+
+            # Check if job failed
+            if job_status == TaskStatus.FAILED.value:
+                error_msg = status.get("error", "Unknown error")
+                logger.error(f"Job {job_id} failed after {poll_count} polls: {error_msg}")
+
+                return {
+                    "success": False,
+                    "status": "failed",
+                    "job_id": job_id,
+                    "error_message": error_msg,
+                    "failure_details": {
+                        "polls_before_failure": poll_count,
+                        "elapsed_time_seconds": elapsed,
+                        "last_progress": current_progress,
+                        "last_message": current_message
+                    },
+                    "progress_history": progress_updates if show_progress else None
+                }
+
+            # Job still running - calculate next wait interval
+            if exponential_backoff:
+                # Progressive backoff: 5s → 10s → 15s → 30s
+                interval_index = min(poll_count // 3, len(backoff_intervals) - 1)
+                current_interval = backoff_intervals[interval_index]
+            else:
+                current_interval = poll_interval
+
+            # Wait before next poll
+            await asyncio.sleep(current_interval)
+
+        # Max polls reached
+        elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
+        logger.warning(f"Max polls ({max_polls}) reached for job {job_id}")
+
+        return {
+            "success": False,
+            "status": "max_polls_reached",
+            "job_id": job_id,
+            "elapsed_time_seconds": elapsed,
+            "polls_completed": poll_count,
+            "last_known_status": last_status,
+            "message": f"Job did not complete within {max_polls} polling attempts",
+            "suggestion": f"Job may still be running. Use damien_job_get_status(job_id='{job_id}') to check current status.",
+            "progress_history": progress_updates if show_progress else None
+        }
+
+    except Exception as e:
+        logger.error(f"Error waiting for job completion: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error_message": f"Failed to wait for job completion: {str(e)}",
+            "job_id": params.get("job_id")
+        }
+
+
 def register_async_tools():
     """Register all async job processing tools."""
     logger.info("🚀 Starting registration of async job processing tools...")
@@ -580,8 +741,57 @@ def register_async_tools():
         handler="damien_ai_bulk_operations"
     )
     tool_registry.register_tool(tool_def6, damien_ai_bulk_operations_handler)
-    
-    logger.info("✅ Successfully registered 6 async job processing tools")
+
+    # Wait for completion tool (Issue #34 Enhancement)
+    tool_def7 = ToolDefinition(
+        name="damien_job_wait_for_completion",
+        description="🎯 AUTO-POLL JOB UNTIL COMPLETE - No more manual status checks! Automatically waits for job completion with real-time progress updates and smart timeout handling.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "job_id": {
+                    "type": "string",
+                    "description": "Job ID to wait for (returned from async operations)"
+                },
+                "poll_interval": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 60,
+                    "default": 10,
+                    "description": "Base polling interval in seconds (default: 10). Ignored if exponential_backoff is true."
+                },
+                "timeout": {
+                    "type": "integer",
+                    "minimum": 30,
+                    "maximum": 3600,
+                    "default": 600,
+                    "description": "Maximum wait time in seconds (default: 600 = 10 minutes)"
+                },
+                "max_polls": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 200,
+                    "default": 60,
+                    "description": "Maximum number of status checks (default: 60)"
+                },
+                "show_progress": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Display progress updates during polling (default: true)"
+                },
+                "exponential_backoff": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Use progressive polling intervals: 5s → 10s → 15s → 30s (default: true)"
+                }
+            },
+            "required": ["job_id"]
+        },
+        handler="damien_job_wait_for_completion"
+    )
+    tool_registry.register_tool(tool_def7, damien_job_wait_for_completion_handler)
+
+    logger.info("✅ Successfully registered 7 async job processing tools (including auto-poll enhancement)")
 
 
 # Export registration function
