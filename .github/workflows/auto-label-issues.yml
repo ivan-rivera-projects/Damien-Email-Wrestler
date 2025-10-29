@@ -1,0 +1,131 @@
+name: Auto-label Issues
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  auto-label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Auto-label based on keywords
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue = context.payload.issue;
+            const title = issue.title.toLowerCase();
+            const body = (issue.body || '').toLowerCase();
+            const content = `${title} ${body}`;
+
+            const labelsToAdd = new Set();
+
+            // Component-based labels
+            const componentKeywords = {
+              'type:tool-failure': ['tool fails', 'tool failure', 'tool error', 'command fails'],
+              'type:data-retrieval': ['email body', 'retrieve', 'fetch data', 'get email'],
+              'type:documentation': ['docs', 'documentation', 'readme', 'guide'],
+              'type:metric': ['metric', 'percentage', 'statistics', 'calculation'],
+              'type:output-quality': ['output', 'response', 'message', 'redundant'],
+              'type:logic': ['script', 'logic', 'algorithm', 'calculation']
+            };
+
+            // Severity keywords (only if not already specified in template)
+            const severityKeywords = {
+              'critical': ['critical', 'blocks workflow', 'urgent', 'production down'],
+              'high': ['high priority', 'significant impact', 'major bug'],
+              'medium': ['medium priority', 'noticeable impact'],
+              'low': ['low priority', 'minor', 'enhancement']
+            };
+
+            // Feature-related keywords
+            const featureKeywords = {
+              'enhancement': ['feature request', 'enhancement', 'improvement', 'new feature'],
+              'documentation': ['documentation', 'docs update', 'readme'],
+              'bug': ['bug', 'error', 'failure', 'issue', 'broken', 'not working']
+            };
+
+            // Special status keywords
+            const statusKeywords = {
+              'needs-investigation': ['investigate', 'unclear', 'unknown cause', 'debug'],
+              'data-integrity': ['data integrity', 'data loss', 'data consistency']
+            };
+
+            // Check component keywords
+            for (const [label, keywords] of Object.entries(componentKeywords)) {
+              if (keywords.some(keyword => content.includes(keyword))) {
+                labelsToAdd.add(label);
+              }
+            }
+
+            // Check severity keywords (only if not already labeled by template)
+            const hasExistingSeverity = issue.labels.some(l =>
+              ['critical', 'high', 'medium', 'low'].includes(l.name)
+            );
+
+            if (!hasExistingSeverity) {
+              for (const [label, keywords] of Object.entries(severityKeywords)) {
+                if (keywords.some(keyword => content.includes(keyword))) {
+                  labelsToAdd.add(label);
+                  break; // Only add one severity label
+                }
+              }
+            }
+
+            // Check feature keywords
+            for (const [label, keywords] of Object.entries(featureKeywords)) {
+              if (keywords.some(keyword => content.includes(keyword))) {
+                labelsToAdd.add(label);
+              }
+            }
+
+            // Check status keywords
+            for (const [label, keywords] of Object.entries(statusKeywords)) {
+              if (keywords.some(keyword => content.includes(keyword))) {
+                labelsToAdd.add(label);
+              }
+            }
+
+            // Add MCP-specific labels
+            if (content.includes('mcp') || content.includes('model context protocol')) {
+              labelsToAdd.add('component:mcp');
+            }
+
+            if (content.includes('ai analysis') || content.includes('ai tool')) {
+              labelsToAdd.add('component:ai');
+            }
+
+            if (content.includes('lambda') || content.includes('aws')) {
+              labelsToAdd.add('component:aws');
+            }
+
+            // Convert Set to Array and add labels
+            const labels = Array.from(labelsToAdd);
+
+            if (labels.length > 0) {
+              console.log(`Adding labels: ${labels.join(', ')}`);
+
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: labels
+              });
+
+              // Add comment explaining auto-labeling
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `🏷️ **Auto-labeling**: Added labels based on issue content: ${labels.map(l => `\`${l}\``).join(', ')}\n\nIf these labels are incorrect, feel free to update them manually.`
+              });
+            } else {
+              console.log('No additional labels to add');
+            }

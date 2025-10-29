@@ -1,0 +1,240 @@
+name: Generate Changelog
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_tag:
+        description: 'Start tag (e.g., v1.0.0)'
+        required: true
+      to_tag:
+        description: 'End tag (e.g., v1.1.0 or HEAD)'
+        required: false
+        default: 'HEAD'
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: read
+  issues: read
+
+jobs:
+  generate-changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for changelog generation
+
+      - name: Generate changelog
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+
+            // Get input parameters
+            const fromTag = context.payload.inputs?.from_tag || process.env.FROM_TAG;
+            const toTag = context.payload.inputs?.to_tag || 'HEAD';
+
+            console.log(`Generating changelog from ${fromTag} to ${toTag}`);
+
+            // Get all commits between tags
+            const commits = await github.rest.repos.compareCommitsWithBasehead({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              basehead: `${fromTag}...${toTag}`
+            });
+
+            // Extract issue numbers from commits
+            const issueNumbers = new Set();
+            const prNumbers = new Set();
+
+            commits.data.commits.forEach(commit => {
+              const message = commit.commit.message;
+
+              // Extract issue numbers (#123)
+              const issueMatches = message.match(/#(\d+)/g);
+              if (issueMatches) {
+                issueMatches.forEach(match => {
+                  issueNumbers.add(parseInt(match.substring(1)));
+                });
+              }
+            });
+
+            // Fetch details for all issues and PRs
+            const changes = {
+              breaking: [],
+              features: [],
+              fixes: [],
+              documentation: [],
+              performance: [],
+              refactor: [],
+              other: []
+            };
+
+            for (const issueNumber of issueNumbers) {
+              try {
+                const issue = await github.rest.issues.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber
+                });
+
+                // Determine if it's a PR or issue
+                const isPR = issue.data.pull_request !== undefined;
+                const item = {
+                  number: issueNumber,
+                  title: issue.data.title,
+                  url: issue.data.html_url,
+                  labels: issue.data.labels.map(l => l.name),
+                  isPR: isPR
+                };
+
+                // Categorize based on labels and title
+                if (item.labels.includes('breaking')) {
+                  changes.breaking.push(item);
+                } else if (item.title.toLowerCase().startsWith('feature:') ||
+                          item.labels.includes('enhancement')) {
+                  changes.features.push(item);
+                } else if (item.title.toLowerCase().startsWith('fix:') ||
+                          item.labels.includes('bug')) {
+                  changes.fixes.push(item);
+                } else if (item.title.toLowerCase().startsWith('docs:') ||
+                          item.labels.includes('documentation')) {
+                  changes.documentation.push(item);
+                } else if (item.title.toLowerCase().startsWith('perf:') ||
+                          item.labels.includes('performance')) {
+                  changes.performance.push(item);
+                } else if (item.title.toLowerCase().startsWith('refactor:')) {
+                  changes.refactor.push(item);
+                } else {
+                  changes.other.push(item);
+                }
+              } catch (error) {
+                console.log(`Could not fetch issue #${issueNumber}: ${error.message}`);
+              }
+            }
+
+            // Generate changelog markdown
+            const sections = [];
+
+            if (changes.breaking.length > 0) {
+              sections.push('## 🚨 Breaking Changes\n');
+              changes.breaking.forEach(item => {
+                sections.push(`- ${item.title} ([#${item.number}](${item.url}))`);
+              });
+              sections.push('');
+            }
+
+            if (changes.features.length > 0) {
+              sections.push('## ✨ New Features\n');
+              changes.features.forEach(item => {
+                sections.push(`- ${item.title} ([#${item.number}](${item.url}))`);
+              });
+              sections.push('');
+            }
+
+            if (changes.fixes.length > 0) {
+              sections.push('## 🐛 Bug Fixes\n');
+              changes.fixes.forEach(item => {
+                sections.push(`- ${item.title} ([#${item.number}](${item.url}))`);
+              });
+              sections.push('');
+            }
+
+            if (changes.performance.length > 0) {
+              sections.push('## ⚡ Performance Improvements\n');
+              changes.performance.forEach(item => {
+                sections.push(`- ${item.title} ([#${item.number}](${item.url}))`);
+              });
+              sections.push('');
+            }
+
+            if (changes.documentation.length > 0) {
+              sections.push('## 📚 Documentation\n');
+              changes.documentation.forEach(item => {
+                sections.push(`- ${item.title} ([#${item.number}](${item.url}))`);
+              });
+              sections.push('');
+            }
+
+            if (changes.refactor.length > 0) {
+              sections.push('## 🔧 Refactoring\n');
+              changes.refactor.forEach(item => {
+                sections.push(`- ${item.title} ([#${item.number}](${item.url}))`);
+              });
+              sections.push('');
+            }
+
+            if (changes.other.length > 0) {
+              sections.push('## 🔨 Other Changes\n');
+              changes.other.forEach(item => {
+                sections.push(`- ${item.title} ([#${item.number}](${item.url}))`);
+              });
+              sections.push('');
+            }
+
+            // Generate full changelog
+            const today = new Date().toISOString().split('T')[0];
+            const changelogHeader = [
+              `# Changelog`,
+              ``,
+              `## [${toTag}] - ${today}`,
+              ``,
+              `**Full Changelog**: https://github.com/${context.repo.owner}/${context.repo.repo}/compare/${fromTag}...${toTag}`,
+              ``
+            ].join('\n');
+
+            const changelog = changelogHeader + sections.join('\n');
+
+            // Output changelog
+            console.log('Generated Changelog:');
+            console.log(changelog);
+
+            // Save to file
+            const changelogPath = 'CHANGELOG.md';
+            let existingChangelog = '';
+
+            try {
+              existingChangelog = fs.readFileSync(changelogPath, 'utf8');
+            } catch (error) {
+              // File doesn't exist, create new one
+              existingChangelog = '# Changelog\n\nAll notable changes to this project will be documented in this file.\n\n';
+            }
+
+            // Prepend new changelog entry
+            const updatedChangelog = existingChangelog.replace(
+              '# Changelog',
+              changelog
+            );
+
+            fs.writeFileSync(changelogPath, updatedChangelog);
+
+            // Set output for later steps
+            core.setOutput('changelog', changelog);
+
+      - name: Commit changelog
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "docs: Update CHANGELOG.md for ${{ github.event.inputs.to_tag || 'release' }}" || echo "No changes to commit"
+          git push || echo "Nothing to push"
+
+      - name: Create release notes (if release event)
+        if: github.event_name == 'release'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: context.payload.release.id,
+              body: changelog
+            });

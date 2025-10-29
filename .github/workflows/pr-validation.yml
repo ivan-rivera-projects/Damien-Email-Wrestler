@@ -1,0 +1,136 @@
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+permissions:
+  pull-requests: write
+  issues: read
+  contents: read
+
+jobs:
+  validate-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate PR requirements
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const title = pr.title;
+            const body = pr.body || '';
+
+            const validationResults = [];
+            let hasErrors = false;
+
+            // Check 1: PR must link to an issue
+            const issueRegex = /(fixes|closes|resolves|relates to)\s+#(\d+)/gi;
+            const issueMatches = body.match(issueRegex);
+
+            if (!issueMatches || issueMatches.length === 0) {
+              validationResults.push('❌ **Missing Issue Link**: PR must reference at least one issue using `Fixes #123` or `Relates to #456`');
+              hasErrors = true;
+            } else {
+              validationResults.push(`✅ **Issue Links Found**: ${issueMatches.join(', ')}`);
+            }
+
+            // Check 2: Title should follow convention
+            const titleRegex = /^(Fix|Feature|Docs|Refactor|Test|Chore|Perf):/i;
+            if (!titleRegex.test(title)) {
+              validationResults.push('⚠️ **Title Convention**: Consider using format: `Type: Description (#issue)`\n  Examples: `Fix:`, `Feature:`, `Docs:`, `Refactor:`');
+            } else {
+              validationResults.push('✅ **Title Format**: Follows convention');
+            }
+
+            // Check 3: Description should not be empty or template
+            const minBodyLength = 100;
+            const hasTemplate = body.includes('<!-- Provide a clear and concise description');
+
+            if (body.length < minBodyLength || hasTemplate) {
+              validationResults.push('⚠️ **Description**: Please fill out the PR template completely');
+            } else {
+              validationResults.push('✅ **Description**: Adequately filled out');
+            }
+
+            // Check 4: Testing section should be filled
+            if (body.includes('### Manual Testing') && !body.includes('- [x]')) {
+              validationResults.push('⚠️ **Testing**: Please check completed testing items');
+            }
+
+            // Check 5: Look for breaking changes
+            if (body.toLowerCase().includes('breaking change')) {
+              validationResults.push('⚠️ **Breaking Change Detected**: Ensure this is clearly documented and communicated');
+            }
+
+            // Check 6: Documentation updates
+            const fileChanges = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
+            });
+
+            const hasCodeChanges = fileChanges.data.some(f =>
+              f.filename.endsWith('.py') ||
+              f.filename.endsWith('.js') ||
+              f.filename.endsWith('.ts')
+            );
+
+            const hasDocChanges = fileChanges.data.some(f =>
+              f.filename.endsWith('.md') ||
+              f.filename.includes('docs/')
+            );
+
+            if (hasCodeChanges && !hasDocChanges) {
+              validationResults.push('⚠️ **Documentation**: Consider updating documentation for code changes');
+            }
+
+            // Create validation report
+            const report = [
+              '## 🔍 PR Validation Report',
+              '',
+              ...validationResults,
+              '',
+              '---',
+              hasErrors ? '❌ **Action Required**: Please address the errors above before merging.' : '✅ **All Critical Checks Passed**: PR looks good!',
+              '',
+              '<sub>This is an automated validation. Feel free to reach out if you have questions.</sub>'
+            ].join('\n');
+
+            // Find existing validation comment
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number
+            });
+
+            const botComment = comments.data.find(c =>
+              c.user.type === 'Bot' &&
+              c.body.includes('PR Validation Report')
+            );
+
+            // Update or create comment
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: report
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: report
+              });
+            }
+
+            // Fail if critical errors
+            if (hasErrors) {
+              core.setFailed('PR validation failed. Please address the errors.');
+            }
