@@ -29,8 +29,8 @@ tiktoken = "^0.7.0"  # For token counting
 python-json-logger = "^2.0.7" # Added for structured logging
 
 # ML and Data Science Dependencies (Core)
-torch = "2.2.2"  # PyTorch CPU version - compatible with sentence-transformers
-sentence-transformers = "2.6.0"  # For sentence embeddings - compatible version  
+torch = ">=2.6.0,<3.0.0"  # PyTorch compatible with Python 3.13 ARM64
+sentence-transformers = ">=2.6.0,<3.0.0"  # For sentence embeddings  
 numpy = "^1.24.0,<2.0.0"  # Compatible with sentence-transformers and torch
 scikit-learn = "^1.4.0"  # For clustering and ML algorithms
 pandas = "^2.2.0"  # For data analysis and manipulation
