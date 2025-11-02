@@ -272,3 +272,6 @@ docs/GEMINI_MCP_CONFIGURATION.md
 github-mcp-server/
 claude-code-mcp-bug-repro/
 docs/archive/
+
+# Claude Code local settings
+.claude/
